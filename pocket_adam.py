@@ -220,7 +220,7 @@ def search_web(query: str) -> str:
         return f"Service web indisponible ({e})."
 
 def get_route(origin: str, destination: str) -> str:
-    """Calcule un itinéraire réel via la nouvelle Google Routes API."""
+    """Calcule et extrait les étapes réelles et officielles via la Google Routes API."""
     api_key = get_secret("GOOGLE_MAPS_API_KEY")
     if not api_key:
         return "Erreur : La clé API Google Maps (GOOGLE_MAPS_API_KEY) n'est pas configurée dans les secrets Streamlit."
@@ -244,15 +244,31 @@ def get_route(origin: str, destination: str) -> str:
         
         if "routes" in data and len(data["routes"]) > 0:
             route = data["routes"][0]
-            duration_sec = int(route.get("duration", "0s").replace("s", ""))
-            duration_min = round(duration_sec / 60)
-            distance_m = route.get("distanceMeters", 0)
+            duration_min = round(int(route.get("duration", "0s").replace("s", "")) / 60)
+            distance_km = round(route.get("distanceMeters", 0) / 1000, 1)
             
-            summary = f"**Itinéraire officiel (Routes API) de {origin} vers {destination}**\n"
-            summary += f"⏱️ Durée estimée : environ **{duration_min} minutes** (Distance : {distance_m} m)\n"
+            steps_desc = []
+            legs = route.get("legs", [])
+            if legs and "steps" in legs[0]:
+                for i, step in enumerate(legs[0]["steps"], 1):
+                    transit_details = step.get("transitDetails")
+                    if transit_details:
+                        line = transit_details.get("transitLine", {}).get("name", "Transport")
+                        vehicle = transit_details.get("transitLine", {}).get("vehicle", {}).get("type", "Bus/Train")
+                        num_stops = transit_details.get("numStops", 0)
+                        headsign = transit_details.get("headsign", "")
+                        step_text = f"Prendre {vehicle} {line} (direction: {headsign}), sur {num_stops} arrêts."
+                    else:
+                        step_text = step.get("navigationInstruction", {}).get("instructions", "Marcher jusqu'à la correspondance")
+                    
+                    steps_desc.append(f"Étape {i}: {step_text}")
+            
+            summary = f"**Itinéraire officiel Google Maps (De {origin} à {destination})**\n"
+            summary += f"⏱️ Durée estimée : ~**{duration_min} minutes** | 📏 Distance : **{distance_km} km**\n\n"
+            summary += "Instructions officielles de transport :\n" + "\n".join(steps_desc)
             return summary
         else:
-            return f"Impossible de calculer l'itinéraire via la Routes API. Réponse : {data}"
+            return f"Impossible de calculer l'itinéraire via la Routes API. Réponse brute : {data}"
     except Exception as e:
         return f"Erreur de connexion au service cartographique : {e}"
 
