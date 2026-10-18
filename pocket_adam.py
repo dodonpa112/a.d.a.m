@@ -178,3 +178,16 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                     st.session_state.messages.append({"role": "assistant", "content": reply})
             except Exception as e:
                 st.error(f"Erreur de liaison neuronale : {e}")
+from streamlit_geolocation import streamlit_geolocation
+
+# Dans la barre latérale ou en haut de l'application
+st.sidebar.subheader("📍 Position GPS")
+location = streamlit_geolocation()
+
+if location.get('latitude') and location.get('longitude'):
+    lat = location['latitude']
+    lon = location['longitude']
+    # Vous pouvez enregistrer automatiquement ces coordonnées dans la mémoire
+    save_memory("current_latitude", str(lat))
+    save_memory("current_longitude", str(lon))
+    st.sidebar.success(f"Position mise à jour : {lat}, {lon}")
