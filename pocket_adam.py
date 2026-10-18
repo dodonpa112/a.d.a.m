@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import os
 import sqlite3
+import requests
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -21,7 +22,6 @@ client = OpenAI(
 MEMORY_FILE = "memory.json"
 DB_FILE = "adam_dynamic_memory.db"
 
-# Initialisation de la base de données SQLite pour les souvenirs dynamiques
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -37,7 +37,6 @@ def init_db():
 init_db()
 
 def load_memories():
-    # 1. Charger le fichier JSON statique (emploi du temps, routines)
     memories = {}
     if os.path.exists(MEMORY_FILE):
         try:
@@ -46,7 +45,6 @@ def load_memories():
         except Exception:
             pass
             
-    # 2. Charger les ajouts dynamiques de la base de données SQLite
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT key, value FROM memories")
@@ -72,56 +70,84 @@ def save_memory(key: str, value: str) -> str:
     except Exception as e:
         return f"Failed to save: {e}"
 
+def search_web(query: str) -> str:
+    """Utilise une recherche en ligne pour trouver des horaires de tram ou des infos en temps réel."""
+    try:
+        # Recherche rapide via une API publique ou DuckDuckGo instant answer
+        url = f"https://api.duckduckgo.com/?q={query}&format=json"
+        res = requests.get(url).json()
+        abstract = res.get("AbstractText")
+        if abstract:
+            return abstract
+        # Fallback de recherche textuelle
+        return f"Recherche effectuée pour : {query}. Consultez les applications de transport (STIB/NMBS) pour les horaires exacts en direct."
+    except Exception as e:
+        return f"Erreur lors de la recherche transport : {e}"
+
 TOOLS = [
     {
         "type": "function",
         "function": {
             "name": "save_memory",
-            "description": "Saves a permanent fact, wake-up event, appointment, or detail about the user.",
+            "description": "Enregistre un fait permanent, un réveil ou un rendez-vous.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "key": {"type": "string", "description": "The category or title (e.g. 'wake_up_today', 'appointment_dentist')"},
-                    "value": {"type": "string", "description": "The details of the event or time"}
+                    "key": {"type": "string"},
+                    "value": {"type": "string"}
                 },
                 "required": ["key", "value"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_web",
+            "description": "Recherche des informations en temps réel sur les transports, les trams ou les trajets à Bruxelles.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "La requête de transport ou d'itinéraire (ex: horaires tram Bruxelles, trajet vers Campus Kaai)"}
+                },
+                "required": ["query"]
             }
         }
     }
 ]
 
 st.title("🛡️ Pocket A.D.A.M.")
-st.caption("Your personal command center, routines, and memory banks.")
+st.caption("Votre centre de commande personnel, routines et transports.")
 
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "Systems online. What do you need to check or update, sir?"}
+        {"role": "assistant", "content": "Systèmes en ligne, sir. Que souhaitez-vous vérifier ou planifier ?"}
     ]
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-if user_input := st.chat_input("Message Pocket A.D.A.M..."):
+if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
 
     memories = load_memories()
-    system_parser_prompt = (
-        "You are Pocket A.D.A.M., a smart, concise, and loyal J.A.R.V.I.S.-style personal assistant. "
-        "You have full awareness of the user's schedule, routines, academics, and habits. "
-        "If the user says things like 'I just woke up' or gives you an appointment/event, ALWAYS use the `save_memory` tool to record it."
+    system_prompt = (
+        "Tu es Pocket A.D.A.M., un assistant personnel intelligent et fidèle de style J.A.R.V.I.S., basé à Bruxelles. "
+        "Tu as accès aux horaires de l'EhB (Campus Kaai), aux routines de l'utilisateur, et tu peux utiliser l'outil `search_web` "
+        "pour trouver des informations sur les transports en commun (STIB, trams, bus, trains) ou des estimations de trajets si on te le demande."
     )
     if memories:
-        system_parser_prompt += f"\n\nLOADED USER MEMORIES/SCHEDULE:\n{json.dumps(memories, indent=2)}"
+        system_prompt += f"\n\nMÉMOIRES ET EMPLOI DU TEMPS DE L'UTILISATEUR :\n{json.dumps(memories, indent=2)}"
 
-    formatted_messages = [{"role": "system", "content": system_parser_prompt}]
+    formatted_messages = [{"role": "system", "content": system_prompt}]
     for msg in st.session_state.messages:
         formatted_messages.append({"role": msg["role"], "content": msg["content"]})
 
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+        with st.spinner("Analyse en cours..."):
             try:
                 response = client.chat.completions.create(
                     model="openai/gpt-oss-120b",
@@ -134,15 +160,21 @@ if user_input := st.chat_input("Message Pocket A.D.A.M..."):
                 
                 if msg.tool_calls:
                     for tool_call in msg.tool_calls:
+                        args = json.loads(tool_call.function.arguments)
                         if tool_call.function.name == "save_memory":
-                            args = json.loads(tool_call.function.arguments)
-                            res = save_memory(args.get("key"), args.get("value"))
-                            reply = f"Noted. I've recorded that: {args.get('key')} — {args.get('value')}."
-                            st.markdown(reply)
-                            st.session_state.messages.append({"role": "assistant", "content": reply})
+                            save_memory(args.get("key"), args.get("value"))
+                            reply = f"C'est noté. J'ai enregistré : {args.get('key')} — {args.get('value')}."
+                        elif tool_call.function.name == "search_web":
+                            search_result = search_web(args.get("query"))
+                            reply = f"Voici les informations de trajet trouvées :\n\n{search_result}"
+                        else:
+                            reply = "Action exécutée."
+                        
+                        st.markdown(reply)
+                        st.session_state.messages.append({"role": "assistant", "content": reply})
                 else:
                     reply = msg.content
                     st.markdown(reply)
                     st.session_state.messages.append({"role": "assistant", "content": reply})
             except Exception as e:
-                st.error(f"Neural link error: {e}")
+                st.error(f"Erreur de liaison neuronale : {e}")
