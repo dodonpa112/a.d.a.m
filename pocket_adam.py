@@ -33,8 +33,38 @@ client = OpenAI(
     base_url="https://api.groq.com/openai/v1"
 )
 
-# Modèle optimisé pour le Tool Calling sur Groq
-MODEL_NAME = "llama-3.3-70b-versatile"
+# Liste de modèles par ordre de priorité (Bascule automatique si un modèle n'existe plus)
+FALLBACK_MODELS = [
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "llama-3.1-8b-instant"
+]
+
+def call_llm(messages, tools=None, tool_choice=None, temperature=0.2):
+    """Appelle Groq en testant les modèles de secours si le modèle principal est indisponible."""
+    last_error = None
+    for model_name in FALLBACK_MODELS:
+        try:
+            kwargs = {
+                "model": model_name,
+                "messages": messages,
+                "temperature": temperature
+            }
+            if tools is not None:
+                kwargs["tools"] = tools
+            if tool_choice is not None:
+                kwargs["tool_choice"] = tool_choice
+            return client.chat.completions.create(**kwargs)
+        except Exception as e:
+            last_error = e
+            err_str = str(e).lower()
+            # Si le modèle n'existe pas (404) ou est décommissionné, on essaie le suivant
+            if "404" in err_str or "model_not_found" in err_str or "decommissioned" in err_str or "not exist" in err_str:
+                continue
+            # Pour les autres erreurs (ex: 400 tool_use_failed), on remonte l'erreur au filet de sécurité
+            raise e
+    raise last_error
 
 DB_FILE = "adam_system.db"
 MEMORY_FILE = "memory.json"
@@ -199,7 +229,6 @@ def get_canvas_assignments() -> str:
         
     headers = {"Authorization": f"Bearer {token}"}
     try:
-        # Interroge à la fois les événements à venir et la liste des tâches (Todo)
         r_events = requests.get(f"{base_url}/api/v1/users/self/upcoming_events", headers=headers, timeout=8)
         r_todo = requests.get(f"{base_url}/api/v1/users/self/todo", headers=headers, timeout=8)
         
@@ -230,17 +259,15 @@ def control_pc(app_name: str = "", action: str = "", target: str = "") -> str:
     if not raw_url:
         return "Erreur : PC_BRIDGE_URL n'est pas configuré dans les secrets Streamlit."
         
-    # Nettoyage automatique si toute la ligne Ngrok a été copiée par erreur (ex: "https://... -> http://...")
     bridge_url = raw_url.split("->")[0].strip().rstrip('/')
     
-    # Récupération résiliente du nom de l'application
     final_app = (app_name or target or action).strip().lower()
     if not final_app:
         return "Erreur : Aucun nom d'application fourni."
 
     headers = {
         "Content-Type": "application/json",
-        "ngrok-skip-browser-warning": "true" # Contourne le pare-feu visuel de Ngrok
+        "ngrok-skip-browser-warning": "true"
     }
     
     try:
@@ -487,7 +514,6 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
 
         formatted_messages = [{"role": "system", "content": system_prompt}]
         
-        # Historique glissant limité aux 6 derniers échanges pour économiser les tokens
         for m in st.session_state.messages[-6:]:
             if m["role"] in ["user", "assistant"] and m.get("content"):
                 formatted_messages.append({"role": m["role"], "content": m["content"]})
@@ -496,10 +522,9 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
             with st.spinner("Analyse tactique en cours..."):
                 reply = ""
                 try:
-                    # Boucle permettant jusqu'à 3 appels d'outils consécutifs (ex: read_memory -> search_web -> réponse)
+                    # Boucle permettant jusqu'à 3 appels d'outils consécutifs
                     for step in range(3):
-                        response = client.chat.completions.create(
-                            model=MODEL_NAME,
+                        response = call_llm(
                             messages=formatted_messages,
                             tools=TOOLS,
                             tool_choice="auto",
@@ -508,7 +533,6 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                         msg = response.choices[0].message
 
                         if hasattr(msg, "tool_calls") and msg.tool_calls:
-                            # Conversion propre du message de l'assistant pour éviter les bugs de sérialisation
                             assistant_msg = {
                                 "role": "assistant",
                                 "content": msg.content or "",
@@ -538,8 +562,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
 
                     # Si après 3 tours d'outils l'IA n'a toujours pas formulé de texte final, on force la conclusion sans outils
                     if not reply:
-                        final_res = client.chat.completions.create(
-                            model=MODEL_NAME,
+                        final_res = call_llm(
                             messages=formatted_messages,
                             temperature=0.2
                         )
@@ -547,15 +570,14 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
 
                 except Exception as e:
                     # FILET DE SÉCURITÉ ULTIME : Si Groq renvoie une erreur 400 (tool_use_failed),
-                    # on récupère la mémoire en local et on force une réponse texte pure sans outils.
+                    # on récupère la mémoire et les résultats d'outils déjà obtenus pour répondre proprement en texte.
                     try:
                         mem_context = read_memory()
                         fallback_messages = [
-                            {"role": "system", "content": f"{system_prompt}\nMémoire : {mem_context}"},
+                            {"role": "system", "content": f"{system_prompt}\nMémoire actuelle : {mem_context}"},
                             {"role": "user", "content": user_input}
                         ]
-                        fallback_res = client.chat.completions.create(
-                            model=MODEL_NAME,
+                        fallback_res = call_llm(
                             messages=fallback_messages,
                             temperature=0.3
                         )
