@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 st.set_page_config(
-    page_title="Pocket A.D.A.M.",
+    page_title="A.D.A.M.",
     page_icon="🛡️",
     layout="centered"
 )
@@ -33,37 +33,28 @@ MEMORY_FILE = "memory.json"
 
 # --- LISTE OFFICIELLE DE VOCABULAIRE PORTUGAIS ---
 PORTUGUESE_VOCAB = [
-    # Pronoms
     ("Eu", "I"), ("Você", "You"), ("Tu", "You"), ("Ele", "He / It"),
     ("Ela", "She / It"), ("Nós", "We"), ("Eles", "They"), ("Elas", "They"),
     ("Me / Mim", "Me"), ("Se", "Oneself"), ("Meu / Minha", "My / Mine"), ("Seu / Sua", "Your / His / Her"),
-    # Verbes Essentiels
     ("Ser", "To be"), ("Estar", "To be"), ("Ter", "To have"), ("Fazer", "To do / To make"),
     ("Ir", "To go"), ("Poder", "Can / To be able to"), ("Querer", "To want"), ("Saber", "To know"),
     ("Ver", "To see"), ("Dizer", "To say / To tell"), ("Dar", "To give"), ("Falar", "To speak / To talk"),
     ("Vir", "To come"), ("Ter de / Ter que", "To have to"),
-    # Articles
     ("O", "The"), ("A", "The"), ("Os", "The"), ("As", "The"),
     ("Um", "A / An / One"), ("Uma", "A / An / One"), ("Este / Esta", "This"), ("Esse / Essa", "That"),
-    # Conjonctions
     ("E", "And"), ("Mas", "But"), ("Ou", "Or"), ("Porque", "Because"),
     ("Se", "If"), ("Como", "As / Like / How"), ("Que", "That / Which / Who"), ("Então", "Then / So"),
-    ("Também", "Also / Too"), ("Portarto", "Therefore / So"),
-    # Prépositions
+    ("Também", "Also / Too"), ("Portanto", "Therefore / So"),
     ("De", "Of / From"), ("Em", "In / On / At"), ("Para", "To / For"), ("Por", "By / Through / For"),
     ("Com", "With"), ("Sem", "Without"), ("Pelo / Pela", "By the / Through the"), ("Sobre", "On / About / Over"), ("Até", "Until / Up to"),
-    # Mots interrogatifs
     ("O quê?", "What?"), ("Quem?", "Who?"), ("Onde?", "Where?"), ("Quando?", "When?"),
     ("Por que?", "Why?"), ("Como?", "How?"), ("Quanto?", "How much? / How many?"),
-    # Noms communs
     ("Coisa", "Thing"), ("Tempo", "Time / Weather"), ("Ano", "Year"), ("Dia", "Day"),
     ("Homem", "Man"), ("Mulher", "Woman"), ("Pessoa", "Person"), ("Vida", "Life"),
     ("Mundo", "World"), ("Casa", "House / Home"), ("Trabalho", "Work / Job"), ("Lugar", "Place"),
-    # Adjectifs
     ("Bom / Boa", "Good"), ("Mau / Má ou Ruim", "Bad"), ("Grande", "Big / Great"), ("Pequeno / Pequena", "Small"),
     ("Novo / Nova", "New / Young"), ("Velho / Velha", "Old"), ("Outro / Outra", "Other / Another"), ("Mesmo / Mesma", "Same"),
     ("Primeiro / Primeira", "First"), ("Último / Última", "Last"), ("Fácil", "Easy"), ("Difícil", "Difficult"),
-    # Adverbes
     ("Não", "No / Not"), ("Sim", "Yes"), ("Muito", "Very / Much"), ("Pouco", "Little / Few"),
     ("Mais", "More"), ("Menos", "Less"), ("Agora", "Now"), ("Hoje", "Today"),
     ("Já", "Already / Now"), ("Sempre", "Always"), ("Nunca", "Never"), ("Aqui", "Here"),
@@ -97,9 +88,8 @@ def init_db():
 
 init_db()
 
-# Gestion des états de session pour le Portugais
 if "pt_state" not in st.session_state:
-    st.session_state.pt_state = "IDLE" # IDLE, WAITING_LIMIT, LEARNING, COMPLETED
+    st.session_state.pt_state = "IDLE"
     st.session_state.pt_limit = 0
     st.session_state.pt_done_count = 0
     st.session_state.pt_used_indices = []
@@ -132,7 +122,6 @@ def save_portuguese_progress(limit, index, used, completed):
     except Exception as e:
         print(f"Erreur save progress : {e}")
 
-# --- OUTILS & MÉMOIRES ---
 def load_memories():
     memories = {
         "user_name": "Manu Paulo Cristo",
@@ -202,7 +191,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "search_web",
-            "description": "Recherche météo actuelle/future, itinéraires de transports en commun (STIB, trains, bus) avec arrêts et horaires en temps réel.",
+            "description": "Recherche météo actuelle/future, itinéraires de transports en commun avec arrêts et horaires en temps réel.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -214,28 +203,59 @@ TOOLS = [
     }
 ]
 
-# --- INTERFACE STREAMLIT ---
-st.title("🛡️ Pocket A.D.A.M.")
-st.caption("Centre de commandement personnel, intelligence tactique, transport & portugais.")
+# --- DESIGN CSS PERSONNALISÉ (Fond noir pur, Avatars M & A, Titre épuré) ---
+st.markdown("""
+    <style>
+    .stApp {
+        background-color: #000000;
+        color: #ffffff;
+    }
+    h1 {
+        color: #ffffff;
+        font-family: 'Inter', sans-serif;
+        font-weight: 700;
+        text-align: center;
+    }
+    p {
+        text-align: center;
+        color: #9ca3af;
+    }
+    .stChatInput input {
+        background-color: #111111 !important;
+        color: #ffffff !important;
+        border-radius: 8px !important;
+        border: 1px solid #333333 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# En-tête personnalisé sans le bouclier
+st.title("A.D.A.M.")
+st.markdown("à votre service")
+st.markdown("---")
 
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "Systèmes en ligne, sir. Que souhaitez-vous planifier, vérifier ou apprendre aujourd'hui ?"}
+        {"role": "assistant", "content": "Salutations Mr. Paulo Cristo"}
     ]
 
+# Affichage de l'historique avec les avatars personnalisés ("M" pour Manu, "A" pour l'assistant)
 for msg in st.session_state.messages:
-    if msg["role"] in ["user", "assistant"]:
-        with st.chat_message(msg["role"]):
+    if msg["role"] == "user":
+        with st.chat_message("user", avatar="M"):
+            st.markdown(msg["content"])
+    elif msg["role"] == "assistant":
+        with st.chat_message("assistant", avatar="A"):
             st.markdown(msg["content"])
 
 if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
     st.session_state.messages.append({"role": "user", "content": user_input})
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar="M"):
         st.markdown(user_input)
 
     user_clean = user_input.strip().lower()
     
-    # --- LOGIQUE PORTUGAISE STRICTE & BLINDÉE ---
+    # --- LOGIQUE PORTUGAISE ---
     db_prog = check_daily_portuguese_status()
     if db_prog and db_prog[3] == 1 and st.session_state.pt_state == "IDLE":
         st.session_state.pt_state = "COMPLETED"
@@ -275,7 +295,6 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
 
     elif st.session_state.pt_state == "LEARNING":
         if user_clean in ["mot suivant", "suivant", "next"]:
-            # Sélection d'un nouveau mot aléatoire sans doublon
             import random
             available = [i for i in range(len(PORTUGUESE_VOCAB)) if i not in st.session_state.pt_used_indices]
             if not available or st.session_state.pt_done_count >= st.session_state.pt_limit:
@@ -289,9 +308,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                 st.session_state.pt_current_translation = PORTUGUESE_VOCAB[idx][1].lower()
                 reply = f"Nouveau mot : **{st.session_state.pt_current_word}**. Quelle est sa traduction ?"
         else:
-            # Vérification rigoureuse de la traduction
             current_trans = st.session_state.pt_current_translation
-            # On vérifie si l'utilisateur a tapé une des correspondances valides
             valid_options = [t.strip() for t in current_trans.split('/')]
             is_correct = any(v in user_clean for v in valid_options)
             
@@ -309,7 +326,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                         st.session_state.pt_used_indices.append(idx)
                         st.session_state.pt_current_word = PORTUGUESE_VOCAB[idx][0]
                         st.session_state.pt_current_translation = PORTUGUESE_VOCAB[idx][1].lower()
-                        reply = f"✅ C'est juste ! Tape **mot suivant** pour continuer ou donne directement la suite."
+                        reply = f"✅ C'est juste ! Tape **mot suivant** pour continuer."
                     else:
                         reply = "✅ C'est juste, et il n'y a plus de mots disponibles !"
             else:
@@ -320,19 +337,20 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
         reply = "Tu as déjà validé ta session de portugais du jour. Reviens demain après minuit pour de nouveaux mots, irmãozinho !"
         handled_locally = True
 
-    # --- TRAITEMENT GÉNÉRAL VIA L'IA SI NON GÉRÉ EN LOCAL ---
+    # --- TRAITEMENT GÉNÉRAL VIA L'IA ---
     if handled_locally:
-        st.markdown(reply)
+        with st.chat_message("assistant", avatar="A"):
+            st.markdown(reply)
         st.session_state.messages.append({"role": "assistant", "content": reply})
     else:
         memories = load_memories()
         system_prompt = (
-            "Tu es Pocket A.D.A.M., un assistant personnel ultra-intelligent, analytique et de style J.A.R.V.I.S., basé à Bruxelles. "
-            "Tu assistes Manu Paulo Cristo dans ses études (EhB Campus Kaai), ses plannings, ses calculs de nutrition (calories, protéines, IMC, TDEE), "
-            "ses prévisions météo détaillées et ses recherches d'itinéraires précis de transports en commun (STIB, bus, tram, train) avec arrêts et horaires. "
+            "Tu es A.D.A.M., un assistant personnel ultra-intelligent, analytique et de style J.A.R.V.I.S., basé à Bruxelles. "
+            "Tu assistes Manu Paulo Cristo dans ses études (EhB Campus Kaai), ses plannings, ses calculs de nutrition, "
+            "ses prévisions météo détaillées et ses recherches d'itinéraires précis de transports en commun (STIB, bus, tram, train). "
             "Règles strictes : "
-            "1. Ne renvoie jamais l'utilisateur vers un site externe pour chercher l'information : utilise l'outil `search_web` pour trouver les horaires, trams, météo ou données en direct, puis formule une réponse claire, directe et structurée. "
-            "2. Enregistre automatiquement toute information utile (calories, objectifs, plannings) via `save_memory`."
+            "1. Ne renvoie jamais l'utilisateur vers un site externe : utilise l'outil `search_web` pour trouver les horaires, trams, météo ou données en direct. "
+            "2. Enregistre automatiquement toute information utile via `save_memory`."
         )
         if memories:
             system_prompt += f"\n\nDONNÉES ET MÉMOIRES DE L'UTILISATEUR :\n{json.dumps(memories, indent=2)}"
@@ -342,7 +360,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
             if m["role"] in ["user", "assistant"]:
                 formatted_messages.append({"role": m["role"], "content": m["content"]})
 
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar="A"):
             with st.spinner("Analyse tactique en cours..."):
                 try:
                     response = client.chat.completions.create(
@@ -385,6 +403,6 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                     st.markdown(reply)
                     st.session_state.messages.append({"role": "assistant", "content": reply})
                 except Exception as e:
-                    err = f"Erreur de liaison neuronale : {e}"
-                    st.error(err)
-                    st.session_state.messages.append({"role": "assistant", "content": err})
+                    reply = f"Erreur de liaison neuronale : {e}"
+                    st.error(reply)
+                    st.session_state.messages.append({"role": "assistant", "content": reply})
