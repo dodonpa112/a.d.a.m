@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import os
+import sqlite3
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -18,22 +19,55 @@ client = OpenAI(
 )
 
 MEMORY_FILE = "memory.json"
+DB_FILE = "adam_dynamic_memory.db"
+
+# Initialisation de la base de données SQLite pour les souvenirs dynamiques
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS memories (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
 
 def load_memories():
+    # 1. Charger le fichier JSON statique (emploi du temps, routines)
+    memories = {}
     if os.path.exists(MEMORY_FILE):
         try:
             with open(MEMORY_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                memories = json.load(f)
         except Exception:
-            return {}
-    return {}
+            pass
+            
+    # 2. Charger les ajouts dynamiques de la base de données SQLite
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT key, value FROM memories")
+    dynamic_mems = cursor.fetchall()
+    conn.close()
+    
+    if "dynamic_notes" not in memories:
+        memories["dynamic_notes"] = {}
+        
+    for k, v in dynamic_mems:
+        memories["dynamic_notes"][k] = v
+        
+    return memories
 
 def save_memory(key: str, value: str) -> str:
-    memories = load_memories()
-    memories[key] = value
     try:
-        with open(MEMORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(memories, f, indent=4)
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO memories (key, value) VALUES (?, ?)", (key, value))
+        conn.commit()
+        conn.close()
         return f"Successfully saved: {key} -> {value}"
     except Exception as e:
         return f"Failed to save: {e}"
@@ -74,15 +108,15 @@ if user_input := st.chat_input("Message Pocket A.D.A.M..."):
         st.markdown(user_input)
 
     memories = load_memories()
-    system_prompt = (
+    system_parser_prompt = (
         "You are Pocket A.D.A.M., a smart, concise, and loyal J.A.R.V.I.S.-style personal assistant. "
         "You have full awareness of the user's schedule, routines, academics, and habits. "
         "If the user says things like 'I just woke up' or gives you an appointment/event, ALWAYS use the `save_memory` tool to record it."
     )
     if memories:
-        system_prompt += f"\n\nLOADED USER MEMORIES/SCHEDULE:\n{json.dumps(memories, indent=2)}"
+        system_parser_prompt += f"\n\nLOADED USER MEMORIES/SCHEDULE:\n{json.dumps(memories, indent=2)}"
 
-    formatted_messages = [{"role": "system", "content": system_prompt}]
+    formatted_messages = [{"role": "system", "content": system_parser_prompt}]
     for msg in st.session_state.messages:
         formatted_messages.append({"role": msg["role"], "content": msg["content"]})
 
@@ -98,7 +132,6 @@ if user_input := st.chat_input("Message Pocket A.D.A.M..."):
                 
                 msg = response.choices[0].message
                 
-                # Handle tool calls if A.D.A.M. decides to save something
                 if msg.tool_calls:
                     for tool_call in msg.tool_calls:
                         if tool_call.function.name == "save_memory":
