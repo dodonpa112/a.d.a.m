@@ -1,0 +1,450 @@
+{
+    "user_name": "Manu Paulo Cristo",
+    "institution": "Erasmushogeschool Brussel (EhB) - Campus Kaai",
+    "program": "System and Network Management",
+    "schedule_details": {
+        "W03 (28/09/2026 - 04/10/2026)": {
+            "Monday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Networks I (Hoorcollege & Werkcollege)",
+                    "lecturer": "Eric Jonckers",
+                    "location": "Netwerklabo - KAI.B.1.02c"
+                }
+            ],
+            "Tuesday": [
+                {
+                    "time": "13:30 - 15:30",
+                    "course": "IT Essentials (Hoorcollege)",
+                    "lecturer": "Geert Coulommier",
+                    "location": "KAI.A.0.A4"
+                }
+            ],
+            "Wednesday": [
+                {
+                    "time": "13:30 - 15:30",
+                    "course": "IT Essentials (Hoorcollege)",
+                    "lecturer": "Geert Coulommier",
+                    "location": "KAI.A.0.A4"
+                }
+            ],
+            "Thursday": [
+                {
+                    "time": "09:30 - 11:30",
+                    "course": "Scripting with Python (Hoorcollege & Werkcollege)",
+                    "lecturer": "Bart Van Cutsem",
+                    "location": "KAI.B.1.01"
+                }
+            ],
+            "Friday": [
+                {
+                    "time": "13:30 - 15:30",
+                    "course": "IT Essentials (Hoorcollege)",
+                    "lecturer": "Geert Coulommier",
+                    "location": "KAI.A.0.A4"
+                }
+            ]
+        },
+        "W04 (05/10/2026 - 11/10/2026)": {
+            "Monday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Networks I (Hoorcollege & Werkcollege)",
+                    "lecturer": "Eric Jonckers",
+                    "location": "Netwerklabo - KAI.B.1.02c"
+                }
+            ],
+            "Tuesday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Networks I (Hoorcollege & Werkcollege)",
+                    "lecturer": "Eric Jonckers",
+                    "location": "Netwerklabo - KAI.B.1.02c"
+                },
+                {
+                    "time": "13:30 - 15:30",
+                    "course": "IT Essentials (Hoorcollege)",
+                    "lecturer": "Geert Coulommier",
+                    "location": "KAI.A.0.A4"
+                }
+            ],
+            "Wednesday": [
+                {
+                    "time": "13:30 - 15:30",
+                    "course": "IT Essentials (Hoorcollege)",
+                    "lecturer": "Geert Coulommier",
+                    "location": "KAI.A.0.A4"
+                }
+            ],
+            "Thursday": [
+                {
+                    "time": "09:30 - 11:30",
+                    "course": "Scripting with Python (Hoorcollege & Werkcollege)",
+                    "lecturer": "Bart Van Cutsem",
+                    "location": "KAI.A.0.A4"
+                }
+            ],
+            "Friday": [
+                {
+                    "time": "13:30 - 15:00",
+                    "course": "Trends & Talent (Online via Teams)",
+                    "lecturer": "St\u00e9phanie Uytterhaegen",
+                    "location": "Teams"
+                }
+            ]
+        },
+        "W05 (12/10/2026 - 18/10/2026)": {
+            "Monday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Networks I",
+                    "lecturer": "Eric Jonckers",
+                    "location": "KAI.A.0.A1"
+                }
+            ],
+            "Tuesday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Networks I",
+                    "lecturer": "Eric Jonckers",
+                    "location": "KAI.A.0.A4"
+                },
+                {
+                    "time": "13:30 - 15:30",
+                    "course": "IT Essentials",
+                    "lecturer": "Geert Coulommier",
+                    "location": "KAI.A.0.A4"
+                }
+            ],
+            "Wednesday": [
+                {
+                    "time": "13:30 - 15:30",
+                    "course": "IT Essentials",
+                    "lecturer": "Geert Coulommier",
+                    "location": "KAI.A.0.A4"
+                }
+            ],
+            "Thursday": [
+                {
+                    "time": "13:30 - 15:30",
+                    "course": "IT Essentials",
+                    "lecturer": "Geert Coulommier",
+                    "location": "KAI.A.0.A4"
+                }
+            ],
+            "Friday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Scripting with Python",
+                    "lecturer": "Bart Van Cutsem",
+                    "location": "KAI.A.0.A3"
+                }
+            ]
+        },
+        "W06 (19/10/2026 - 25/10/2026)": {
+            "Monday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Networks I",
+                    "lecturer": "Eric Jonckers",
+                    "location": "Netwerklabo - KAI.B.1.02c"
+                },
+                {
+                    "time": "13:30 - 15:30",
+                    "course": "IT Essentials",
+                    "lecturer": "Geert Coulommier",
+                    "location": "KAI.A.0.A4"
+                }
+            ],
+            "Tuesday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Networks I",
+                    "lecturer": "Eric Jonckers",
+                    "location": "Netwerklabo - KAI.B.1.02c"
+                },
+                {
+                    "time": "13:30 - 15:30",
+                    "course": "IT Essentials",
+                    "lecturer": "Geert Coulommier",
+                    "location": "KAI.A.0.A4"
+                }
+            ],
+            "Wednesday": [
+                {
+                    "time": "13:30 - 15:30",
+                    "course": "IT Essentials",
+                    "lecturer": "Geert Coulommier",
+                    "location": "KAI.A.0.A4"
+                }
+            ],
+            "Thursday": [
+                {
+                    "time": "13:30 - 15:30",
+                    "course": "IT Essentials",
+                    "lecturer": "Geert Coulommier",
+                    "location": "KAI.A.0.A4"
+                }
+            ],
+            "Friday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Scripting with Python",
+                    "lecturer": "Bart Van Cutsem",
+                    "location": "KAI.A.0.A3"
+                }
+            ]
+        },
+        "W07 (26/10/2026 - 01/11/2026)": {
+            "Tuesday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Networks I",
+                    "lecturer": "Eric Jonckers",
+                    "location": "KAI.A.0.A3"
+                },
+                {
+                    "time": "13:30 - 16:30",
+                    "course": "LAB 1 (IT Lab Practicum)",
+                    "lecturer": "Arno Van Blijenbergh & Bram Drabb\u00e9",
+                    "location": "Netwerklabo - KAI.B.1.02c"
+                }
+            ],
+            "Wednesday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "LAB 2 (IT Lab Practicum)",
+                    "lecturer": "Eric Jonckers",
+                    "location": "Netwerklabo - KAI.B.1.02c"
+                }
+            ],
+            "Thursday": [
+                {
+                    "time": "12:30 - 15:30",
+                    "course": "Scripting with Python",
+                    "lecturer": "Bart Van Cutsem",
+                    "location": "KAI.A.0.A4"
+                }
+            ]
+        },
+        "W08 (02/11/2026 - 08/11/2026)": {
+            "All Days": "Herfstvakantie (Vacances d'automne)"
+        },
+        "W09 (09/11/2026 - 15/11/2026)": {
+            "Wednesday": "Wapenstilstand (Jour f\u00e9ri\u00e9)",
+            "Thursday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Evaluatie Networks I",
+                    "lecturer": "Eric Jonckers",
+                    "location": "Netwerklabo - KAI.B.1.02c"
+                },
+                {
+                    "time": "13:30 - 16:30",
+                    "course": "Evaluatie IT Essentials",
+                    "lecturer": "Bram Drabb\u00e9 & Geert Coulommier",
+                    "location": "KAI.A.0.A3 / KAI.A.1.A7"
+                }
+            ]
+        },
+        "W10 (16/11/2026 - 22/11/2026)": {
+            "Monday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "LAB 3 (IT Lab Practicum)",
+                    "lecturer": "Eric Jonckers",
+                    "location": "Netwerklabo - KAI.B.1.02c"
+                },
+                {
+                    "time": "13:30 - 16:30",
+                    "course": "Desktop OS Werkcollege",
+                    "lecturer": "Waldo Heudens",
+                    "location": "KAI.A.1.A5"
+                }
+            ],
+            "Wednesday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Desktop OS Werkcollege",
+                    "lecturer": "Waldo Heudens",
+                    "location": "KAI.A.0.A4"
+                },
+                {
+                    "time": "13:30 - 15:30",
+                    "course": "Scripting with Python",
+                    "lecturer": "Bart Van Cutsem",
+                    "location": "KAI.A.0.A1"
+                }
+            ],
+            "Thursday": [
+                {
+                    "time": "09:30 - 16:30",
+                    "course": "Brussels Career Day (Evenement)",
+                    "lecturer": "Divers",
+                    "location": "Campus Kaai - KAI.0.00"
+                }
+            ],
+            "Friday": "Sint-Verhaegen"
+        },
+        "W11 (23/11/2026 - 29/11/2026)": {
+            "Monday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Desktop OS Werkcollege",
+                    "lecturer": "Waldo Heudens",
+                    "location": "KAI.A.0.A1"
+                }
+            ],
+            "Tuesday": [
+                {
+                    "time": "13:30 - 16:30",
+                    "course": "Desktop OS Werkcollege",
+                    "lecturer": "Waldo Heudens",
+                    "location": "KAI.A.0.A3"
+                }
+            ],
+            "Wednesday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "LAB 4 (IT Lab Practicum)",
+                    "lecturer": "Eric Jonckers",
+                    "location": "Netwerklabo - KAI.B.1.02c"
+                }
+            ],
+            "Thursday": [
+                {
+                    "time": "13:30 - 15:30",
+                    "course": "Scripting with Python",
+                    "lecturer": "Bart Van Cutsem",
+                    "location": "KAI.A.0.A4"
+                }
+            ]
+        },
+        "W12 (30/11/2026 - 06/12/2026)": {
+            "Monday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Desktop OS Werkcollege",
+                    "lecturer": "Waldo Heudens",
+                    "location": "KAI.A.0.A4"
+                }
+            ],
+            "Tuesday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Desktop OS Werkcollege",
+                    "lecturer": "Waldo Heudens",
+                    "location": "KAI.A.0.A4"
+                }
+            ],
+            "Thursday": [
+                {
+                    "time": "12:30 - 15:30",
+                    "course": "LAB 5 (IT Lab Practicum)",
+                    "lecturer": "Arno Van Blijenbergh",
+                    "location": "Netwerklabo - KAI.B.1.02c"
+                }
+            ],
+            "Friday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Scripting with Python",
+                    "lecturer": "Bart Van Cutsem",
+                    "location": "KAI.A.0.A4"
+                }
+            ]
+        },
+        "W13 (07/12/2026 - 13/12/2026)": {
+            "Monday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Desktop OS Werkcollege",
+                    "lecturer": "Waldo Heudens",
+                    "location": "KAI.A.0.A1"
+                }
+            ],
+            "Tuesday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "LAB 7 - Deel 1",
+                    "lecturer": "Eric Jonckers",
+                    "location": "Netwerklabo - KAI.B.1.02c"
+                },
+                {
+                    "time": "13:30 - 16:30",
+                    "course": "LAB 7 - Deel 2",
+                    "lecturer": "Eric Jonckers",
+                    "location": "Netwerklabo - KAI.B.1.02c"
+                }
+            ],
+            "Wednesday": [
+                {
+                    "time": "13:30 - 16:30",
+                    "course": "LAB 6",
+                    "lecturer": "Bram Drabb\u00e9",
+                    "location": "Netwerklabo - KAI.B.1.02c"
+                }
+            ],
+            "Thursday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Scripting with Python",
+                    "lecturer": "Bart Van Cutsem",
+                    "location": "KAI.A.1.A6"
+                }
+            ],
+            "Friday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Desktop OS Werkcollege",
+                    "lecturer": "Waldo Heudens",
+                    "location": "Online"
+                }
+            ]
+        },
+        "W14 (14/12/2026 - 20/12/2026)": {
+            "Tuesday": [
+                {
+                    "time": "13:30 - 16:30",
+                    "course": "Desktop OS Werkcollege",
+                    "lecturer": "Waldo Heudens",
+                    "location": "KAI.A.0.A3"
+                }
+            ],
+            "Wednesday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "LAB 8",
+                    "lecturer": "Arno Van Blijenbergh",
+                    "location": "KAI.A.0.A1"
+                },
+                {
+                    "time": "12:30 - 15:30",
+                    "course": "LAB 9",
+                    "lecturer": "Arno Van Blijenbergh",
+                    "location": "KAI.A.0.A4"
+                }
+            ],
+            "Thursday": [
+                {
+                    "time": "09:30 - 12:30",
+                    "course": "Scripting with Python",
+                    "lecturer": "Bart Van Cutsem",
+                    "location": "KAI.A.0.A4"
+                }
+            ],
+            "Friday": [
+                {
+                    "time": "13:30 - 16:30",
+                    "course": "Desktop OS Werkcollege",
+                    "lecturer": "Waldo Heudens",
+                    "location": "Online"
+                }
+            ]
+        },
+        "W15 - W16 (21/12/2026 - 03/01/2027)": {
+            "All Days": "Wintervakantie (Vacances d'hiver / No\u00ebl)"
+        }
+    },
+    "audition_molenbeek_06nov": "6 November 2026, 09:00, Commissariat de Molenbeek"
+}
