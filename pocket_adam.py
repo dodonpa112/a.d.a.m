@@ -34,47 +34,39 @@ MEMORY_FILE = "memory.json"
 
 # --- LISTE OFFICIELLE DE VOCABULAIRE PORTUGAIS (TRADUCTIONS 100% FRANÇAIS) ---
 PORTUGUESE_VOCAB = [
-    # Pronoms
     ("Eu", "Je"), ("Você", "Vous"), ("Tu", "Tu"), ("Ele", "Il"),
     ("Ela", "Elle"), ("Nós", "Nous"), ("Eles", "Eux / Ils"), ("Elas", "Elles"),
     ("Me / Mim", "Moi"), ("Se", "Se / Soi"), ("Meu / Minha", "Mon / Ma / Miens"), ("Seu / Sua", "Ton / Sa / Son"),
-    # Verbes Essentiels
     ("Ser", "Être"), ("Estar", "Être"), ("Ter", "Avoir"), ("Fazer", "Faire"),
     ("Ir", "Aller"), ("Poder", "Pouvoir"), ("Querer", "Vouloir"), ("Saber", "Savoir"),
     ("Ver", "Voir"), ("Dizer", "Dire"), ("Dar", "Donner"), ("Falar", "Parler"),
     ("Vir", "Venir"), ("Ter de / Ter que", "Devoir"),
-    # Articles
     ("O", "Le"), ("A", "La"), ("Os", "Les"), ("As", "Les"),
     ("Um", "Un"), ("Uma", "Une"), ("Este / Esta", "Ce / Cette"), ("Esse / Essa", "Ce / Cette"),
-    # Conjonctions
     ("E", "Et"), ("Mas", "Mais"), ("Ou", "Ou"), ("Porque", "Parce que"),
     ("Se", "Si"), ("Como", "Comme"), ("Que", "Que"), ("Então", "Alors / Donc"),
     ("Também", "Aussi"), ("Portanto", "Par conséquent / Donc"),
-    # Prépositions
     ("De", "De"), ("Em", "Dans / En / Sur"), ("Para", "Pour / Vers"), ("Por", "Par"),
     ("Com", "Avec"), ("Sem", "Sans"), ("Pelo / Pela", "Par le / Par la"), ("Sobre", "Sur / À propos de"), ("Até", "Jusqu'à"),
-    # Mots interrogatifs
     ("O quê?", "Quoi ?"), ("Quem?", "Qui ?"), ("Onde?", "Où ?"), ("Quando?", "Quand ?"),
     ("Por que?", "Pourquoi ?"), ("Como?", "Comment ?"), ("Quanto?", "Combien ?"),
-    # Noms communs
     ("Coisa", "Chose"), ("Tempo", "Temps"), ("Ano", "Année"), ("Dia", "Jour"),
     ("Homem", "Homme"), ("Mulher", "Femme"), ("Pessoa", "Personne"), ("Vida", "Vie"),
     ("Mundo", "Monde"), ("Casa", "Maison"), ("Trabalho", "Travail"), ("Lugar", "Lieu / Endroit"),
-    # Adjectifs
     ("Bom / Boa", "Bon / Bonne"), ("Mau / Má ou Ruim", "Mauvais / Mauvaise"), ("Grande", "Grand / Grande"), ("Pequeno / Pequena", "Petit / Petite"),
     ("Novo / Nova", "Nouveau / Neuf / Jeune"), ("Velho / Velha", "Vieux / Vieille"), ("Outro / Outra", "Autre"), ("Mesmo / Mesma", "Même"),
     ("Primeiro / Primeira", "Premier / Première"), ("Último / Última", "Dernier / Dernière"), ("Fácil", "Facile"), ("Difícil", "Difficile"),
-    # Adverbes
     ("Não", "Non"), ("Sim", "Oui"), ("Muito", "Très / Beaucoup"), ("Pouco", "Peu"),
     ("Mais", "Plus"), ("Menos", "Moins"), ("Agora", "Maintenant"), ("Hoje", "Aujourd'hui"),
     ("Já", "Déjà"), ("Sempre", "Toujours"), ("Nunca", "Jamais"), ("Aqui", "Ici"),
     ("Ali / Lá", "Là-bas / Là"), ("Bem", "Bien"), ("Mal", "Mal"), ("Talvez", "Peut-être")
 ]
 
-# --- INITIALISATION DE LA BASE DE DONNÉES SQLite ---
+# --- OPTIMISATION 1 : MISE EN CACHE DE LA BDD ---
+@st.cache_resource
 def init_db():
     try:
-        conn = sqlite3.connect(DB_FILE)
+        conn = sqlite3.connect(DB_FILE, check_same_thread=False)
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS memories (
@@ -158,6 +150,14 @@ def load_memories():
         pass
     return memories
 
+# --- OPTIMISATION 2 : L'OUTIL DE LECTURE DE MÉMOIRE ---
+def read_memory(topic: str = "all") -> str:
+    """Outil pour que l'IA consulte la base de données uniquement quand elle en a besoin."""
+    memories = load_memories()
+    if not memories:
+        return "Aucune mémoire enregistrée."
+    return json.dumps(memories, separators=(',', ':'))
+
 def save_memory(key: str, value: str) -> str:
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -169,16 +169,18 @@ def save_memory(key: str, value: str) -> str:
     except Exception as e:
         return f"Erreur : {e}"
 
+# --- OPTIMISATION 3 : RECHERCHE WEB BULLETPROOF ET LÉGÈRE ---
 def search_web(query: str) -> str:
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-        response = requests.post("https://html.duckduckgo.com/html/", data={"q": query}, headers=headers, timeout=10)
-        if response.status_code != 200:
-            return "Erreur de connexion au service de recherche."
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        response = requests.post("https://html.duckduckgo.com/html/", data={"q": query}, headers=headers, timeout=5)
+        response.raise_for_status()
+        
         soup = BeautifulSoup(response.text, 'html.parser')
-        # Limité à 2 snippets pour économiser les tokens
         results = [s.get_text(strip=True) for s in soup.find_all('a', class_='result__snippet', limit=2) if s.get_text(strip=True)]
-        return "\n\n".join(results) if results else "Aucun résultat pertinent trouvé."
+        
+        final_text = " | ".join(results)[:500] 
+        return final_text if final_text else "Aucun résultat pertinent trouvé."
     except Exception as e:
         return f"Erreur recherche web : {e}"
 
@@ -206,8 +208,7 @@ def get_canvas_assignments() -> str:
     except Exception as e:
         return f"Erreur Canvas : {e}"
 
-def control_pc(action: str, target: str) -> str:
-    """Envoie une commande au PC local de l'utilisateur via le tunnel Ngrok configuré."""
+def control_pc(app_name: str) -> str:
     bridge_url = os.environ.get("PC_BRIDGE_URL")
     try:
         if not bridge_url:
@@ -219,15 +220,23 @@ def control_pc(action: str, target: str) -> str:
         return "Le pont de connexion vers le PC (PC_BRIDGE_URL) n'est pas configuré dans les secrets."
         
     try:
-        response = requests.post(f"{bridge_url}/execute", json={"action": action, "target": target}, timeout=5)
+        response = requests.post(f"{bridge_url}/execute", json={"app_name": app_name}, timeout=5)
         if response.status_code == 200:
-            return "Ordre exécuté avec succès sur votre PC, sir."
+            return f"Ordre de lancement pour '{app_name}' exécuté avec succès sur votre PC, sir."
         else:
             return "Impossible de joindre le PC (vérifiez si le script local et Ngrok sont actifs)."
     except Exception as e:
         return f"Erreur de communication avec le PC : {e}"
 
 TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "read_memory",
+            "description": "Consulte la mémoire locale pour retrouver des informations sur l'utilisateur (planning, préférences, notes personnelles).",
+            "parameters": {"type": "object", "properties": {}}
+        }
+    },
     {
         "type": "function",
         "function": {
@@ -269,20 +278,21 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "control_pc",
-            "description": "Exécute une action physique ou ouvre une application/site web sur le PC de l'utilisateur.",
+            "description": "Lance une application spécifique sur le PC de l'utilisateur.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "action": {"type": "string", "description": "Type d'action, ex: 'open_browser'"},
-                    "target": {"type": "string", "description": "La cible, ex: 'youtube' ou 'canvas'"}
+                    "app_name": {
+                        "type": "string",
+                        "description": "Le nom exact de l'exécutable Windows de l'application à lancer (ex: 'notepad' pour le bloc-notes, 'chrome', 'calc', 'spotify', 'winword'). Ne mettez jamais l'extension .exe."
+                    }
                 },
-                "required": ["action", "target"]
+                "required": ["app_name"]
             }
         }
     }
 ]
 
-# --- DESIGN CSS PERSONNALISÉ ---
 st.markdown("""
     <style>
     .stApp {
@@ -332,7 +342,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
 
     user_clean = user_input.strip().lower()
     
-    # --- LOGIQUE PORTUGAISE SÉCURISÉE ---
+    # --- LOGIQUE PORTUGAISE ---
     db_prog = check_daily_portuguese_status()
     is_completed_today = (db_prog and db_prog[3] == 1)
     
@@ -411,28 +421,21 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                 reply = f"❌ Faux ! La traduction française de **{st.session_state.pt_current_word}** n'est pas correcte. Réessaie avec le bon mot."
         handled_locally = True
 
-    # --- TRAITEMENT GÉNÉRAL VIA L'IA (Avec historique glissant de 6 messages) ---
+    # --- TRAITEMENT GÉNÉRAL VIA L'IA ---
     if handled_locally:
         with st.chat_message("assistant", avatar="🛡️"):
             st.markdown(reply)
         st.session_state.messages.append({"role": "assistant", "content": reply})
     else:
-        memories = load_memories()
+        # --- OPTIMISATION 4 : PROMPT SYSTEME LÉGER ---
         system_prompt = (
-            "Tu es A.D.A.M., un assistant personnel ultra-intelligent, analytique et de style J.A.R.V.I.S., basé à Bruxelles. "
-            "Tu assistes Manu Paulo Cristo dans ses études à l'EhB (Campus Kaai), ses plannings, ses notes Canvas, ses calculs de nutrition, "
-            "ses prévisions météo détaillées, ses recherches d'itinéraires précis de transports en commun (STIB, bus, tram, train) "
-            "et le pilotage à distance de son PC. "
-            "Règles strictes : "
-            "1. Ne renvoie jamais l'utilisateur vers un site externe : utilise `search_web`, `get_canvas_assignments` ou `control_pc` pour trouver ou exécuter les informations en direct. "
-            "2. Enregistre automatiquement toute information utile via `save_memory`."
+            "Tu es A.D.A.M. (J.A.R.V.I.S style), assistant de Manu Paulo Cristo à Bruxelles. "
+            "Règles: 1. Utilise tes outils pour t'informer si besoin (read_memory, search_web, get_canvas_assignments, control_pc). "
+            "2. Ne charge pas d'informations au hasard. 3. Sois concis. 4. Enregistre les faits importants via save_memory."
         )
-        if memories:
-            system_prompt += f"\n\nDONNÉES ET MÉMOIRES DE L'UTILISATEUR :\n{json.dumps(memories, indent=2)}"
 
         formatted_messages = [{"role": "system", "content": system_prompt}]
         
-        # Historique glissant limité aux 6 derniers messages pour économiser les tokens
         recent_messages = st.session_state.messages[-6:]
         for m in recent_messages:
             if m["role"] in ["user", "assistant"]:
@@ -457,14 +460,16 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                             except Exception:
                                 args = {}
                                 
-                            if tool_call.function.name == "save_memory":
+                            if tool_call.function.name == "read_memory":
+                                tool_output = read_memory()
+                            elif tool_call.function.name == "save_memory":
                                 tool_output = save_memory(args.get("key", "note"), args.get("value", ""))
                             elif tool_call.function.name == "search_web":
                                 tool_output = search_web(args.get("query", user_input))
                             elif tool_call.function.name == "get_canvas_assignments":
                                 tool_output = get_canvas_assignments()
                             elif tool_call.function.name == "control_pc":
-                                tool_output = control_pc(args.get("action", ""), args.get("target", ""))
+                                tool_output = control_pc(args.get("app_name", ""))
                             else:
                                 tool_output = "Action exécutée."
                                 
