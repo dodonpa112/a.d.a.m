@@ -176,7 +176,8 @@ def search_web(query: str) -> str:
         if response.status_code != 200:
             return "Erreur de connexion au service de recherche."
         soup = BeautifulSoup(response.text, 'html.parser')
-        results = [s.get_text(strip=True) for s in soup.find_all('a', class_='result__snippet', limit=4) if s.get_text(strip=True)]
+        # Optimisation : On limite à 2 snippets pour économiser les tokens
+        results = [s.get_text(strip=True) for s in soup.find_all('a', class_='result__snippet', limit=2) if s.get_text(strip=True)]
         return "\n\n".join(results) if results else "Aucun résultat pertinent trouvé."
     except Exception as e:
         return f"Erreur recherche web : {e}"
@@ -302,7 +303,6 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
     handled_locally = False
     reply = ""
 
-    # 1. Si l'utilisateur tape "estou pronto"
     if user_clean == "estou pronto":
         if is_completed_today:
             reply = "Tu as déjà validé ta session de portugais du jour. Reviens demain après minuit pour de nouveaux mots, irmãozinho !"
@@ -312,7 +312,6 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
             st.session_state.pt_state = "WAITING_LIMIT"
         handled_locally = True
 
-    # 2. Si l'on attend le choix de la limite
     elif st.session_state.pt_state == "WAITING_LIMIT":
         if user_clean.isdigit():
             limit_val = int(user_clean)
@@ -334,7 +333,6 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
             reply = "Veuillez entrer un chiffre valide pour définir la limite (ex: 5)."
         handled_locally = True
 
-    # 3. Si l'on est en train d'apprendre
     elif st.session_state.pt_state == "LEARNING":
         if user_clean in ["mot suivant", "suivant", "next"]:
             import random
@@ -377,7 +375,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                 reply = f"❌ Faux ! La traduction française de **{st.session_state.pt_current_word}** n'est pas correcte. Réessaie avec le bon mot."
         handled_locally = True
 
-    # --- TRAITEMENT GÉNÉRAL VIA L'IA (Si ce n'est pas une commande du module de portugais) ---
+    # --- TRAITEMENT GÉNÉRAL VIA L'IA (Avec optimisation d'historique glissant pour économiser les tokens) ---
     if handled_locally:
         with st.chat_message("assistant", avatar="🛡️"):
             st.markdown(reply)
@@ -396,7 +394,10 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
             system_prompt += f"\n\nDONNÉES ET MÉMOIRES DE L'UTILISATEUR :\n{json.dumps(memories, indent=2)}"
 
         formatted_messages = [{"role": "system", "content": system_prompt}]
-        for m in st.session_state.messages:
+        
+        # Optimisation : On ne garde que les 6 derniers messages de l'historique pour économiser les tokens
+        recent_messages = st.session_state.messages[-6:]
+        for m in recent_messages:
             if m["role"] in ["user", "assistant"]:
                 formatted_messages.append({"role": m["role"], "content": m["content"]})
 
