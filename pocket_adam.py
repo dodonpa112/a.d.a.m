@@ -59,10 +59,8 @@ def call_llm(messages, tools=None, tool_choice=None, temperature=0.2):
         except Exception as e:
             last_error = e
             err_str = str(e).lower()
-            # Si le modèle n'existe pas (404) ou est décommissionné, on essaie le suivant
             if "404" in err_str or "model_not_found" in err_str or "decommissioned" in err_str or "not exist" in err_str:
                 continue
-            # Pour les autres erreurs (ex: 400 tool_use_failed), on remonte l'erreur au filet de sécurité
             raise e
     raise last_error
 
@@ -165,6 +163,7 @@ def load_memories():
         "institution": "Erasmushogeschool Brussel (EhB) - Campus Kaai",
         "program": "System and Network Management",
         "residence": "Bruxelles",
+        "campus_kaai": "Nijverheidskaai 170, 1070 Anderlecht",
         "daily_routine": {"wake_up_time": "07:00 AM", "fitness": "Musculation upper/lower split"}
     }
     if os.path.exists(MEMORY_FILE):
@@ -216,9 +215,51 @@ def search_web(query: str) -> str:
         results = [s.get_text(strip=True) for s in soup.find_all('a', class_='result__snippet', limit=3) if s.get_text(strip=True)]
         
         final_text = " | ".join(results)[:700]
-        return final_text if final_text else "Aucun résultat web trouvé pour cette recherche."
+        return final_text if final_text else "Aucun résultat web trouvé."
     except Exception as e:
-        return f"Service de recherche temporairement indisponible ({e}). Réponds avec tes connaissances internes."
+        return f"Service web indisponible ({e})."
+
+def get_route(origin: str, destination: str) -> str:
+    """Calcule un itinéraire réel via l'API Google Maps Directions."""
+    api_key = get_secret("GOOGLE_MAPS_API_KEY")
+    if not api_key:
+        return "Erreur : La clé API Google Maps (GOOGLE_MAPS_API_KEY) n'est pas configurée dans les secrets Streamlit."
+    
+    url = "https://maps.googleapis.com/maps/api/directions/json"
+    params = {
+        "origin": origin,
+        "destination": destination,
+        "mode": "transit",
+        "region": "be",
+        "language": "fr",
+        "key": api_key
+    }
+    
+    try:
+        response = requests.get(url, params=params, timeout=8)
+        data = response.json()
+        
+        if data.get("status") == "OK":
+            route = data["routes"][0]["legs"][0]
+            duration = route["duration"]["text"]
+            distance = route["distance"]["text"]
+            start_address = route["start_address"]
+            end_address = route["end_address"]
+            
+            steps = []
+            for i, step in enumerate(route["steps"], 1):
+                instruction = step.get("html_instructions", "").replace("<b>", "").replace("</b>", "").replace('<div style="font-size:0.9em">', " (").replace("</div>", ")")
+                mode = step.get("travel_mode", "").lower()
+                steps.append(f"{i}. [{mode.upper()}] {instruction} ({step['distance']['text']}, {step['duration']['text']})")
+                
+            summary = f"**Itinéraire officiel de {start_address} vers {end_address}**\n"
+            summary += f"⏱️ Durée estimée : **{duration}** (Distance : {distance})\n\n"
+            summary += "Étapes détaillées :\n" + "\n".join(steps[:10])
+            return summary
+        else:
+            return f"Impossible de calculer l'itinéraire via l'API (Statut : {data.get('status')})."
+    except Exception as e:
+        return f"Erreur de connexion au service cartographique : {e}"
 
 def get_canvas_assignments() -> str:
     token = get_secret("CANVAS_API_TOKEN")
@@ -247,20 +288,18 @@ def get_canvas_assignments() -> str:
                 items.append(f"- [Devoir] {title} (Pour le : {due})")
                 
         if r_events.status_code != 200 and r_todo.status_code != 200:
-            return f"Erreur API Canvas (Code HTTP {r_events.status_code}). Vérifiez votre token."
+            return f"Erreur API Canvas (Code HTTP {r_events.status_code})."
             
-        return "Échéances Canvas :\n" + "\n".join(items) if items else "Aucun devoir ou événement à venir trouvé sur votre compte Canvas EhB."
+        return "Échéances Canvas :\n" + "\n".join(items) if items else "Aucun devoir ou événement à venir sur Canvas."
     except Exception as e:
-        return f"Erreur de connexion à Canvas : {e}"
+        return f"Erreur Canvas : {e}"
 
 def control_pc(app_name: str = "", action: str = "", target: str = "") -> str:
-    """Accepte app_name (ou target en fallback si l'IA se trompe d'argument)."""
     raw_url = get_secret("PC_BRIDGE_URL")
     if not raw_url:
         return "Erreur : PC_BRIDGE_URL n'est pas configuré dans les secrets Streamlit."
         
     bridge_url = raw_url.split("->")[0].strip().rstrip('/')
-    
     final_app = (app_name or target or action).strip().lower()
     if not final_app:
         return "Erreur : Aucun nom d'application fourni."
@@ -280,16 +319,16 @@ def control_pc(app_name: str = "", action: str = "", target: str = "") -> str:
         if response.status_code == 200:
             return f"Succès : Commande d'ouverture pour '{final_app}' exécutée sur le PC."
         else:
-            return f"Le PC a répondu avec une erreur (Code {response.status_code}) : {response.text}"
+            return f"Erreur PC (Code {response.status_code}) : {response.text}"
     except Exception as e:
-        return f"Impossible de joindre le PC (Vérifiez que adam_bridge.py et Ngrok tournent bien) : {e}"
+        return f"Impossible de joindre le PC (Vérifiez adam_bridge.py et Ngrok) : {e}"
 
 TOOLS = [
     {
         "type": "function",
         "function": {
             "name": "read_memory",
-            "description": "Consulte la mémoire locale pour retrouver l'adresse de domicile, le planning, la routine ou les notes personnelles de l'utilisateur.",
+            "description": "Consulte la mémoire locale pour retrouver l'adresse de domicile, le planning, la routine ou les notes personnelles.",
             "parameters": {"type": "object", "properties": {}}
         }
     },
@@ -301,7 +340,7 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "key": {"type": "string", "description": "Nom de la clé (ex: 'adresse_domicile', 'calories_jour')"},
+                    "key": {"type": "string", "description": "Nom de la clé (ex: 'adresse_domicile')"},
                     "value": {"type": "string", "description": "Valeur à enregistrer"}
                 },
                 "required": ["key", "value"]
@@ -311,12 +350,27 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "search_web",
-            "description": "Recherche sur le web : météo, horaires et itinéraires STIB/SNCB en temps réel, ou informations générales.",
+            "name": "get_route",
+            "description": "Calcule un itinéraire réel et officiel entre une adresse de départ et une destination (comme 'Nijverheidskaai 170, Anderlecht' pour Campus Kaai) en transport en commun.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Mots-clés de recherche précis"}
+                    "origin": {"type": "string", "description": "L'adresse ou le lieu de départ exact (ex: 'Rue des Palais 116, Schaerbeek')"},
+                    "destination": {"type": "string", "description": "L'adresse ou le lieu d'arrivée exact (ex: 'Nijverheidskaai 170, Anderlecht')"}
+                },
+                "required": ["origin", "destination"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_web",
+            "description": "Recherche sur le web des informations générales d'actualité.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Mots-clés de recherche"}
                 },
                 "required": ["query"]
             }
@@ -326,7 +380,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "get_canvas_assignments",
-            "description": "Récupère les devoirs, échéances et événements à venir sur la plateforme scolaire Canvas de l'EhB.",
+            "description": "Récupère les devoirs et échéances sur Canvas de l'EhB.",
             "parameters": {"type": "object", "properties": {}}
         }
     },
@@ -334,13 +388,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "control_pc",
-            "description": "Lance une application ou un site sur le PC Windows de l'utilisateur à distance.",
+            "description": "Lance une application sur le PC Windows de l'utilisateur.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "app_name": {
                         "type": "string",
-                        "description": "Nom exact de l'exécutable Windows sans .exe (ex: 'notepad' pour bloc-notes, 'calc' pour calculatrice, 'chrome', 'spotify', 'cmd') ou une URL complète."
+                        "description": "Nom exact de l'exécutable Windows sans .exe (ex: 'notepad', 'calc', 'chrome')."
                     }
                 },
                 "required": ["app_name"]
@@ -392,7 +446,7 @@ for msg in st.session_state.messages:
         with st.chat_message("assistant", avatar="🛡️"):
             st.markdown(msg["content"])
 
-# --- MOTEUR D'EXÉCUTION D'OUTILS SÉCURISÉ ---
+# --- MOTEUR D'EXÉCUTION D'OUTILS ---
 def execute_tool_call(tool_call, fallback_query=""):
     name = tool_call.function.name
     try:
@@ -406,6 +460,8 @@ def execute_tool_call(tool_call, fallback_query=""):
         return read_memory()
     elif name == "save_memory":
         return save_memory(args.get("key", "note"), args.get("value", ""))
+    elif name == "get_route":
+        return get_route(args.get("origin", ""), args.get("destination", ""))
     elif name == "search_web":
         return search_web(args.get("query", fallback_query))
     elif name == "get_canvas_assignments":
@@ -426,7 +482,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
 
     user_clean = user_input.strip().lower()
     
-    # --- 1. LOGIQUE PORTUGAISE 100% LOCALE (ZÉRO TOKEN) ---
+    # --- 1. LOGIQUE PORTUGAISE 100% LOCALE ---
     db_prog = check_daily_portuguese_status()
     is_completed_today = (db_prog and db_prog[3] == 1)
     
@@ -459,13 +515,13 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
             
             reply = f"Parfait ! C'est parti pour {limit_val} mots. Traduis ce mot en **français** : **{st.session_state.pt_current_word}**"
         else:
-            reply = "Veuillez entrer un chiffre valide supérieur à 0 pour définir la limite (ex: 5)."
+            reply = "Veuillez entrer un chiffre valide supérieur à 0 (ex: 5)."
         handled_locally = True
 
     elif st.session_state.pt_state == "LEARNING":
         if user_clean in ["stop", "quitter", "annuler", "exit"]:
             st.session_state.pt_state = "IDLE"
-            reply = "Session de portugais interrompue, sir. Je repasse en mode normal."
+            reply = "Session de portugais interrompue, sir."
         elif user_clean in ["mot suivant", "suivant", "next"]:
             available = [i for i in range(len(PORTUGUESE_VOCAB)) if i not in st.session_state.pt_used_indices]
             if not available or st.session_state.pt_done_count >= st.session_state.pt_limit:
@@ -477,7 +533,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                 st.session_state.pt_used_indices.append(idx)
                 st.session_state.pt_current_word = PORTUGUESE_VOCAB[idx][0]
                 st.session_state.pt_current_translation = PORTUGUESE_VOCAB[idx][1].lower()
-                reply = f"Nouveau mot à traduire en français : **{st.session_state.pt_current_word}**. Quelle est sa traduction ?"
+                reply = f"Nouveau mot en français : **{st.session_state.pt_current_word}**. Quelle est sa traduction ?"
         else:
             current_trans = st.session_state.pt_current_translation
             valid_options = [t.strip() for t in current_trans.split('/')]
@@ -488,14 +544,14 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                 if st.session_state.pt_done_count >= st.session_state.pt_limit:
                     st.session_state.pt_state = "COMPLETED"
                     save_portuguese_progress(st.session_state.pt_limit, st.session_state.pt_done_count, st.session_state.pt_used_indices, 1)
-                    reply = "C'est exact ! Et voilà, tu as atteint la fin pour aujourd'hui. Boa, irmãozinho!"
+                    reply = "C'est exact ! Tu as atteint la fin pour aujourd'hui. Boa, irmãozinho!"
                 else:
                     reply = "✅ C'est juste ! Tape **mot suivant** pour continuer."
             else:
-                reply = f"❌ Faux ! La traduction française de **{st.session_state.pt_current_word}** n'est pas correcte. Réessaie (ou tape *stop* pour quitter)."
+                reply = f"❌ Faux ! La traduction de **{st.session_state.pt_current_word}** n'est pas correcte. Réessaie."
         handled_locally = True
 
-    # --- 2. TRAITEMENT GÉNÉRAL VIA L'IA (MULTI-TOURS BULLETPROOF) ---
+    # --- 2. TRAITEMENT GÉNÉRAL VIA L'IA ---
     if handled_locally:
         with st.chat_message("assistant", avatar="🛡️"):
             st.markdown(reply)
@@ -506,14 +562,13 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
             f"Tu es A.D.A.M. (style J.A.R.V.I.S.), l'assistant personnel de Manu Paulo Cristo à Bruxelles (Étudiant EhB Campus Kaai). "
             f"Date et heure : {now_str}. "
             "Règles : "
-            "1. Si tu as besoin d'une info personnelle (adresse, routine, notes), appelle d'abord `read_memory`. "
-            "2. Enregistre tout nouveau fait important donné par l'utilisateur avec `save_memory`. "
-            "3. Pour ouvrir une application sur son PC, appelle `control_pc` avec le nom de l'exécutable Windows (ex: 'notepad', 'calc', 'chrome'). "
-            "4. Sois précis, analytique et concis."
+            "1. Pour tout calcul d'itinéraire officiel, utilise TOUJOURS l'outil `get_route` en récupérant d'abord ton adresse en mémoire via `read_memory` si besoin (Campus Kaai = Nijverheidskaai 170, Anderlecht). "
+            "2. Enregistre tout fait important avec `save_memory`. "
+            "3. Pour ouvrir une application PC, appelle `control_pc`. "
+            "4. Sois précis et concis."
         )
 
         formatted_messages = [{"role": "system", "content": system_prompt}]
-        
         for m in st.session_state.messages[-6:]:
             if m["role"] in ["user", "assistant"] and m.get("content"):
                 formatted_messages.append({"role": m["role"], "content": m["content"]})
@@ -522,7 +577,6 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
             with st.spinner("Analyse tactique en cours..."):
                 reply = ""
                 try:
-                    # Boucle permettant jusqu'à 3 appels d'outils consécutifs
                     for step in range(3):
                         response = call_llm(
                             messages=formatted_messages,
@@ -560,27 +614,18 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                             reply = msg.content or "Opération effectuée, sir."
                             break
 
-                    # Si après 3 tours d'outils l'IA n'a toujours pas formulé de texte final, on force la conclusion sans outils
                     if not reply:
-                        final_res = call_llm(
-                            messages=formatted_messages,
-                            temperature=0.2
-                        )
+                        final_res = call_llm(messages=formatted_messages, temperature=0.2)
                         reply = final_res.choices[0].message.content or "Opération terminée, sir."
 
                 except Exception as e:
-                    # FILET DE SÉCURITÉ ULTIME : Si Groq renvoie une erreur 400 (tool_use_failed),
-                    # on récupère la mémoire et les résultats d'outils déjà obtenus pour répondre proprement en texte.
                     try:
                         mem_context = read_memory()
                         fallback_messages = [
-                            {"role": "system", "content": f"{system_prompt}\nMémoire actuelle : {mem_context}"},
+                            {"role": "system", "content": f"{system_prompt}\nMémoire : {mem_context}"},
                             {"role": "user", "content": user_input}
                         ]
-                        fallback_res = call_llm(
-                            messages=fallback_messages,
-                            temperature=0.3
-                        )
+                        fallback_res = call_llm(messages=fallback_messages, temperature=0.3)
                         reply = fallback_res.choices[0].message.content
                     except Exception as fatal_e:
                         reply = f"Erreur de liaison neuronale : {fatal_e}"
