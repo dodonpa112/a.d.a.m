@@ -3,6 +3,7 @@ import json
 import os
 import sqlite3
 import requests
+from bs4 import BeautifulSoup
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -14,7 +15,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# Récupération sécurisée de la clé API (compatible avec les secrets Streamlit Cloud ou fichier .env)
+# Récupération sécurisée de la clé API
 api_key = os.environ.get("GROQ_API_KEY")
 if not api_key:
     try:
@@ -30,7 +31,6 @@ client = OpenAI(
 MEMORY_FILE = "memory.json"
 DB_FILE = "adam_dynamic_memory.db"
 
-# Initialisation de la base de données SQLite pour la persistance cloud
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -46,7 +46,6 @@ def init_db():
 init_db()
 
 def load_memories():
-    # 1. Charger le fichier JSON statique de base (profil, routines)
     memories = {
         "user_name": "Manu Paulo Cristo",
         "institution": "Erasmushogeschool Brussel (EhB) - Campus Kaai",
@@ -65,7 +64,6 @@ def load_memories():
         except Exception:
             pass
             
-    # 2. Charger les souvenirs dynamiques enregistrés via le chat
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT key, value FROM memories")
@@ -92,22 +90,27 @@ def save_memory(key: str, value: str) -> str:
         return f"Failed to save: {e}"
 
 def search_web(query: str) -> str:
-    """Effectue une recherche web générale en temps réel (actualités, transports, faits, etc.)."""
+    """Effectue une recherche web réelle et extrait les extraits pertinents (snippets)."""
     try:
-        url = f"https://api.duckduckgo.com/?q={requests.utils.quote(query)}&format=json"
-        res = requests.get(url).json()
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        response = requests.post("https://html.duckduckgo.com/html/", data={"q": query}, headers=headers, timeout=10)
         
-        abstract = res.get("AbstractText")
-        if abstract:
-            return abstract
+        if response.status_code != 200:
+            return f"Erreur de connexion au moteur de recherche (Code {response.status_code})."
             
-        # Si pas d'extrait direct, on parcourt les sujets associés
-        related = res.get("RelatedTopics", [])
-        for topic in related:
-            if "Text" in topic:
-                return topic["Text"]
+        soup = BeautifulSoup(response.text, 'html.parser')
+        results = []
+        
+        # Extraction des snippets de résultats de recherche DuckDuckGo
+        for snippet in soup.find_all('a', class_='result__snippet', limit=3):
+            text = snippet.get_text(strip=True)
+            if text:
+                results.append(text)
                 
-        return f"Résultats de recherche en ligne pour : '{query}'. (Consultez les sources web pour plus de détails)."
+        if results:
+            return "\n\n".join(results)
+        else:
+            return "Aucun détail textuel n'a pu être extrait pour cette recherche."
     except Exception as e:
         return f"Erreur lors de la recherche web : {e}"
 
@@ -120,7 +123,7 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "key": {"type": "string", "description": "Le titre ou la clé de l'information (ex: 'rendez_vous_medecin', 'reveil')"},
+                    "key": {"type": "string", "description": "Le titre ou la clé de l'information"},
                     "value": {"type": "string", "description": "Les détails de l'événement ou de l'information"}
                 },
                 "required": ["key", "value"]
@@ -131,7 +134,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "search_web",
-            "description": "Recherche n'importe quelle information en temps réel sur Internet (actualités, transports à Bruxelles, culture, faits récents, etc.).",
+            "description": "Recherche n'importe quelle information en temps réel sur Internet (actualités, transports, faits, etc.).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -164,9 +167,9 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
     system_prompt = (
         "Tu es Pocket A.D.A.M., un assistant personnel intelligent et polyvalent de style J.A.R.V.I.S., basé à Bruxelles. "
         "Tu as accès aux informations personnelles et aux routines de l'utilisateur. "
-        "Si l'utilisateur te demande de retenir quelque chose (comme un réveil ou un rendez-vous), utilise l'outil `save_memory`. "
-        "Si l'utilisateur pose une question nécessitant des données actualisées, des faits récents, ou des recherches de transport/itinéraire, "
-        "utilise l'outil `search_web`."
+        "Si l'utilisateur te demande de retenir quelque chose, utilise l'outil `save_memory`. "
+        "Si l'utilisateur pose une question nécessitant des données actualisées, des faits récents, ou des recherches, "
+        "utilise obligatoirement l'outil `search_web` et synthétise les résultats pour lui répondre clairement."
     )
     if memories:
         system_prompt += f"\n\nPROFIL ET MÉMOIRES DE L'UTILISATEUR :\n{json.dumps(memories, indent=2)}"
@@ -193,14 +196,28 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                         if tool_call.function.name == "save_memory":
                             save_memory(args.get("key"), args.get("value"))
                             reply = f"C'est noté, sir. J'ai enregistré : {args.get('key')} — {args.get('value')}."
+                            st.markdown(reply)
+                            st.session_state.messages.append({"role": "assistant", "content": reply})
                         elif tool_call.function.name == "search_web":
                             search_result = search_web(args.get("query"))
-                            reply = f"Voici les informations trouvées sur le web :\n\n{search_result}"
-                        else:
-                            reply = "Action exécutée."
-                        
-                        st.markdown(reply)
-                        st.session_state.messages.append({"role": "assistant", "content": reply})
+                            
+                            # On renvoie les résultats au modèle pour qu'il rédige une belle réponse synthétique
+                            followup_messages = formatted_messages + [
+                                msg,
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tool_call.id,
+                                    "content": search_result
+                                }
+                            ]
+                            
+                            final_response = client.chat.completions.create(
+                                model="openai/gpt-oss-120b",
+                                messages=followup_messages
+                            )
+                            reply = final_response.choices[0].message.content
+                            st.markdown(reply)
+                            st.session_state.messages.append({"role": "assistant", "content": reply})
                 else:
                     reply = msg.content
                     st.markdown(reply)
