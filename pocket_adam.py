@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import os
 import sqlite3
+import random
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, date
@@ -16,23 +17,29 @@ st.set_page_config(
     layout="centered"
 )
 
-# Récupération sécurisée de la clé API Groq
-api_key = os.environ.get("GROQ_API_KEY")
-if not api_key:
-    try:
-        api_key = st.secrets["GROQ_API_KEY"]
-    except Exception:
-        api_key = ""
+# --- CONFIGURATION SÉCURISÉE DES SECRETS ---
+def get_secret(key: str, default: str = "") -> str:
+    val = os.environ.get(key)
+    if not val:
+        try:
+            val = st.secrets.get(key, default)
+        except Exception:
+            val = default
+    return str(val).strip()
 
+api_key = get_secret("GROQ_API_KEY")
 client = OpenAI(
-    api_key=api_key,
+    api_key=api_key if api_key else "missing_key",
     base_url="https://api.groq.com/openai/v1"
 )
+
+# Modèle optimisé pour le Tool Calling sur Groq
+MODEL_NAME = "llama-3.3-70b-versatile"
 
 DB_FILE = "adam_system.db"
 MEMORY_FILE = "memory.json"
 
-# --- LISTE OFFICIELLE DE VOCABULAIRE PORTUGAIS ---
+# --- LISTE OFFICIELLE DE VOCABULAIRE PORTUGAIS (100% FRANÇAIS) ---
 PORTUGUESE_VOCAB = [
     ("Eu", "Je"), ("Você", "Vous"), ("Tu", "Tu"), ("Ele", "Il"),
     ("Ela", "Elle"), ("Nós", "Nous"), ("Eles", "Eux / Ils"), ("Elas", "Elles"),
@@ -62,34 +69,34 @@ PORTUGUESE_VOCAB = [
     ("Ali / Lá", "Là-bas / Là"), ("Bem", "Bien"), ("Mal", "Mal"), ("Talvez", "Peut-être")
 ]
 
-# --- MISE EN CACHE DE LA BDD ---
+# --- INITIALISATION DE LA BASE DE DONNÉES SQLite (AVEC CACHE & LOCK-SAFE) ---
 @st.cache_resource
 def init_db():
     try:
-        conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS memories (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS portuguese_progress (
-                date TEXT PRIMARY KEY,
-                limit_count INTEGER,
-                current_index INTEGER,
-                used_words TEXT,
-                completed INTEGER
-            )
-        """)
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(DB_FILE, timeout=10, check_same_thread=False) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS memories (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS portuguese_progress (
+                    date TEXT PRIMARY KEY,
+                    limit_count INTEGER,
+                    current_index INTEGER,
+                    used_words TEXT,
+                    completed INTEGER
+                )
+            """)
+            conn.commit()
     except Exception as e:
         print(f"Erreur DB init : {e}")
 
 init_db()
 
+# --- ÉTAT DE SESSION PORTUGAIS ---
 if "pt_state" not in st.session_state:
     st.session_state.pt_state = "IDLE"
     st.session_state.pt_limit = 0
@@ -101,35 +108,33 @@ if "pt_state" not in st.session_state:
 def check_daily_portuguese_status():
     today_str = str(date.today())
     try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        cursor.execute("SELECT limit_count, current_index, used_words, completed FROM portuguese_progress WHERE date = ?", (today_str,))
-        row = cursor.fetchone()
-        conn.close()
-        return row
+        with sqlite3.connect(DB_FILE, timeout=10) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT limit_count, current_index, used_words, completed FROM portuguese_progress WHERE date = ?", (today_str,))
+            return cursor.fetchone()
     except Exception:
         return None
 
 def save_portuguese_progress(limit, index, used, completed):
     today_str = str(date.today())
     try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT OR REPLACE INTO portuguese_progress (date, limit_count, current_index, used_words, completed)
-            VALUES (?, ?, ?, ?, ?)
-        """, (today_str, limit, index, json.dumps(used), int(completed)))
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(DB_FILE, timeout=10) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO portuguese_progress (date, limit_count, current_index, used_words, completed)
+                VALUES (?, ?, ?, ?, ?)
+            """, (today_str, limit, index, json.dumps(used), int(completed)))
+            conn.commit()
     except Exception as e:
         print(f"Erreur save progress : {e}")
 
+# --- GESTION DE LA MÉMOIRE ET DES OUTILS ---
 def load_memories():
     memories = {
         "user_name": "Manu Paulo Cristo",
         "institution": "Erasmushogeschool Brussel (EhB) - Campus Kaai",
         "program": "System and Network Management",
-        "residence": "Molenbeek-Saint-Jean / Bruxelles",
+        "residence": "Bruxelles",
         "daily_routine": {"wake_up_time": "07:00 AM", "fitness": "Musculation upper/lower split"}
     }
     if os.path.exists(MEMORY_FILE):
@@ -140,97 +145,124 @@ def load_memories():
             pass
             
     try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        cursor.execute("SELECT key, value FROM memories")
-        for k, v in cursor.fetchall():
-            memories[k] = v
-        conn.close()
+        with sqlite3.connect(DB_FILE, timeout=10) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT key, value FROM memories")
+            for k, v in cursor.fetchall():
+                memories[k] = v
     except Exception:
         pass
     return memories
 
-def read_memory(topic: str = "all") -> str:
+def read_memory() -> str:
     memories = load_memories()
     if not memories:
         return "Aucune mémoire enregistrée."
-    return json.dumps(memories, separators=(',', ':'))
+    return json.dumps(memories, ensure_ascii=False, separators=(',', ':'))
 
 def save_memory(key: str, value: str) -> str:
+    if not key or not value:
+        return "Erreur : clé ou valeur manquante."
     try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO memories (key, value) VALUES (?, ?)", (key, value))
-        conn.commit()
-        conn.close()
-        return f"Enregistré : {key} -> {value}"
+        with sqlite3.connect(DB_FILE, timeout=10) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT OR REPLACE INTO memories (key, value) VALUES (?, ?)", (str(key).strip(), str(value).strip()))
+            conn.commit()
+        return f"Enregistré en mémoire : {key} = {value}"
     except Exception as e:
-        return f"Erreur : {e}"
+        return f"Erreur sauvegarde mémoire : {e}"
 
 def search_web(query: str) -> str:
+    if not query:
+        return "Requête de recherche vide."
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        response = requests.post("https://html.duckduckgo.com/html/", data={"q": query}, headers=headers, timeout=5)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        }
+        response = requests.post("https://html.duckduckgo.com/html/", data={"q": query}, headers=headers, timeout=6)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
-        results = [s.get_text(strip=True) for s in soup.find_all('a', class_='result__snippet', limit=2) if s.get_text(strip=True)]
+        results = [s.get_text(strip=True) for s in soup.find_all('a', class_='result__snippet', limit=3) if s.get_text(strip=True)]
         
-        final_text = " | ".join(results)[:500] 
-        return final_text if final_text else "Aucun résultat pertinent trouvé."
+        final_text = " | ".join(results)[:700]
+        return final_text if final_text else "Aucun résultat web trouvé pour cette recherche."
     except Exception as e:
-        return f"Erreur recherche web : {e}"
+        return f"Service de recherche temporairement indisponible ({e}). Réponds avec tes connaissances internes."
 
 def get_canvas_assignments() -> str:
-    token = os.environ.get("CANVAS_API_TOKEN")
-    try:
-        if not token:
-            token = st.secrets.get("CANVAS_API_TOKEN", "")
-    except Exception:
-        pass
-        
-    base_url = os.environ.get("CANVAS_BASE_URL", "https://ehb.instructure.com")
+    token = get_secret("CANVAS_API_TOKEN")
+    base_url = get_secret("CANVAS_BASE_URL", "https://ehb.instructure.com").rstrip('/')
+    
     if not token:
-        return "Le token d'accès Canvas n'est pas configuré dans les secrets."
+        return "Le token Canvas (CANVAS_API_TOKEN) n'est pas configuré dans les secrets Streamlit."
         
     headers = {"Authorization": f"Bearer {token}"}
     try:
-        response = requests.get(f"{base_url}/api/v1/users/self/upcoming_events", headers=headers, timeout=10)
-        if response.status_code == 200:
-            events = response.json()
-            event_list = [f"- {e.get('title')} (Date limite : {e.get('end_at')})" for e in events]
-            return "Voici vos prochaines échéances sur Canvas :\n" + "\n".join(event_list) if event_list else "Aucun devoir urgent trouvé sur Canvas."
-        else:
-            return f"Erreur lors de la récupération des devoirs Canvas (Code {response.status_code})."
+        # Interroge à la fois les événements à venir et la liste des tâches (Todo)
+        r_events = requests.get(f"{base_url}/api/v1/users/self/upcoming_events", headers=headers, timeout=8)
+        r_todo = requests.get(f"{base_url}/api/v1/users/self/todo", headers=headers, timeout=8)
+        
+        items = []
+        if r_events.status_code == 200:
+            for e in r_events.json()[:5]:
+                title = e.get('title', 'Sans titre')
+                date_end = e.get('end_at') or e.get('start_at') or 'Date non spécifiée'
+                items.append(f"- [Événement] {title} (Échéance : {date_end})")
+                
+        if r_todo.status_code == 200:
+            for t in r_todo.json()[:5]:
+                assignment = t.get('assignment', {})
+                title = assignment.get('name', 'Tâche')
+                due = assignment.get('due_at', 'Sans date')
+                items.append(f"- [Devoir] {title} (Pour le : {due})")
+                
+        if r_events.status_code != 200 and r_todo.status_code != 200:
+            return f"Erreur API Canvas (Code HTTP {r_events.status_code}). Vérifiez votre token."
+            
+        return "Échéances Canvas :\n" + "\n".join(items) if items else "Aucun devoir ou événement à venir trouvé sur votre compte Canvas EhB."
     except Exception as e:
-        return f"Erreur Canvas : {e}"
+        return f"Erreur de connexion à Canvas : {e}"
 
-def control_pc(app_name: str) -> str:
-    bridge_url = os.environ.get("PC_BRIDGE_URL")
-    try:
-        if not bridge_url:
-            bridge_url = st.secrets.get("PC_BRIDGE_URL", "")
-    except Exception:
-        pass
+def control_pc(app_name: str = "", action: str = "", target: str = "") -> str:
+    """Accepte app_name (ou target en fallback si l'IA se trompe d'argument)."""
+    raw_url = get_secret("PC_BRIDGE_URL")
+    if not raw_url:
+        return "Erreur : PC_BRIDGE_URL n'est pas configuré dans les secrets Streamlit."
         
-    if not bridge_url:
-        return "Le pont de connexion vers le PC (PC_BRIDGE_URL) n'est pas configuré dans les secrets."
-        
+    # Nettoyage automatique si toute la ligne Ngrok a été copiée par erreur (ex: "https://... -> http://...")
+    bridge_url = raw_url.split("->")[0].strip().rstrip('/')
+    
+    # Récupération résiliente du nom de l'application
+    final_app = (app_name or target or action).strip().lower()
+    if not final_app:
+        return "Erreur : Aucun nom d'application fourni."
+
+    headers = {
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true" # Contourne le pare-feu visuel de Ngrok
+    }
+    
     try:
-        response = requests.post(f"{bridge_url}/execute", json={"app_name": app_name}, timeout=5)
+        response = requests.post(
+            f"{bridge_url}/execute",
+            json={"app_name": final_app, "target": final_app, "action": "open"},
+            headers=headers,
+            timeout=6
+        )
         if response.status_code == 200:
-            return f"Ordre de lancement pour '{app_name}' exécuté avec succès sur votre PC."
+            return f"Succès : Commande d'ouverture pour '{final_app}' exécutée sur le PC."
         else:
-            return "Impossible de joindre le PC (vérifiez si le script local et Ngrok sont actifs)."
+            return f"Le PC a répondu avec une erreur (Code {response.status_code}) : {response.text}"
     except Exception as e:
-        return f"Erreur de communication avec le PC : {e}"
+        return f"Impossible de joindre le PC (Vérifiez que adam_bridge.py et Ngrok tournent bien) : {e}"
 
 TOOLS = [
     {
         "type": "function",
         "function": {
             "name": "read_memory",
-            "description": "Consulte la mémoire locale pour retrouver des informations sur l'utilisateur (planning, préférences, notes personnelles).",
+            "description": "Consulte la mémoire locale pour retrouver l'adresse de domicile, le planning, la routine ou les notes personnelles de l'utilisateur.",
             "parameters": {"type": "object", "properties": {}}
         }
     },
@@ -238,12 +270,12 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "save_memory",
-            "description": "Enregistre un fait permanent, calories, protéines, planning ou rendez-vous.",
+            "description": "Enregistre une information permanente (adresse, calories, protéines, planning, rendez-vous, préférences).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "key": {"type": "string"},
-                    "value": {"type": "string"}
+                    "key": {"type": "string", "description": "Nom de la clé (ex: 'adresse_domicile', 'calories_jour')"},
+                    "value": {"type": "string", "description": "Valeur à enregistrer"}
                 },
                 "required": ["key", "value"]
             }
@@ -253,11 +285,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "search_web",
-            "description": "Recherche météo actuelle/future, itinéraires de transports en commun avec arrêts et horaires en temps réel.",
+            "description": "Recherche sur le web : météo, horaires et itinéraires STIB/SNCB en temps réel, ou informations générales.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string"}
+                    "query": {"type": "string", "description": "Mots-clés de recherche précis"}
                 },
                 "required": ["query"]
             }
@@ -267,7 +299,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "get_canvas_assignments",
-            "description": "Récupère les devoirs, échéances et tâches à rendre sur la plateforme Canvas de l'EhB.",
+            "description": "Récupère les devoirs, échéances et événements à venir sur la plateforme scolaire Canvas de l'EhB.",
             "parameters": {"type": "object", "properties": {}}
         }
     },
@@ -275,13 +307,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "control_pc",
-            "description": "Lance une application spécifique sur le PC de l'utilisateur.",
+            "description": "Lance une application ou un site sur le PC Windows de l'utilisateur à distance.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "app_name": {
                         "type": "string",
-                        "description": "Le nom exact de l'exécutable Windows (ex: 'notepad' pour le bloc-notes, 'chrome', 'calc', 'spotify', 'winword'). Ne mettez jamais l'extension .exe."
+                        "description": "Nom exact de l'exécutable Windows sans .exe (ex: 'notepad' pour bloc-notes, 'calc' pour calculatrice, 'chrome', 'spotify', 'cmd') ou une URL complète."
                     }
                 },
                 "required": ["app_name"]
@@ -290,6 +322,7 @@ TOOLS = [
     }
 ]
 
+# --- DESIGN CSS PERSONNALISÉ ---
 st.markdown("""
     <style>
     .stApp {
@@ -332,6 +365,33 @@ for msg in st.session_state.messages:
         with st.chat_message("assistant", avatar="🛡️"):
             st.markdown(msg["content"])
 
+# --- MOTEUR D'EXÉCUTION D'OUTILS SÉCURISÉ ---
+def execute_tool_call(tool_call, fallback_query=""):
+    name = tool_call.function.name
+    try:
+        args = json.loads(tool_call.function.arguments) if tool_call.function.arguments else {}
+        if not isinstance(args, dict):
+            args = {}
+    except Exception:
+        args = {}
+
+    if name == "read_memory":
+        return read_memory()
+    elif name == "save_memory":
+        return save_memory(args.get("key", "note"), args.get("value", ""))
+    elif name == "search_web":
+        return search_web(args.get("query", fallback_query))
+    elif name == "get_canvas_assignments":
+        return get_canvas_assignments()
+    elif name == "control_pc":
+        return control_pc(
+            app_name=args.get("app_name", ""),
+            action=args.get("action", ""),
+            target=args.get("target", "")
+        )
+    return "Outil inconnu."
+
+# --- GESTION DES ENTRÉES UTILISATEUR ---
 if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user", avatar="👤"):
@@ -339,6 +399,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
 
     user_clean = user_input.strip().lower()
     
+    # --- 1. LOGIQUE PORTUGAISE 100% LOCALE (ZÉRO TOKEN) ---
     db_prog = check_daily_portuguese_status()
     is_completed_today = (db_prog and db_prog[3] == 1)
     
@@ -355,13 +416,12 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
         handled_locally = True
 
     elif st.session_state.pt_state == "WAITING_LIMIT":
-        if user_clean.isdigit():
+        if user_clean.isdigit() and int(user_clean) > 0:
             limit_val = int(user_clean)
             st.session_state.pt_limit = limit_val
             st.session_state.pt_done_count = 0
             st.session_state.pt_used_indices = []
             
-            import random
             idx = random.randint(0, len(PORTUGUESE_VOCAB) - 1)
             st.session_state.pt_used_indices.append(idx)
             st.session_state.pt_current_word = PORTUGUESE_VOCAB[idx][0]
@@ -372,12 +432,14 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
             
             reply = f"Parfait ! C'est parti pour {limit_val} mots. Traduis ce mot en **français** : **{st.session_state.pt_current_word}**"
         else:
-            reply = "Veuillez entrer un chiffre valide pour définir la limite (ex: 5)."
+            reply = "Veuillez entrer un chiffre valide supérieur à 0 pour définir la limite (ex: 5)."
         handled_locally = True
 
     elif st.session_state.pt_state == "LEARNING":
-        if user_clean in ["mot suivant", "suivant", "next"]:
-            import random
+        if user_clean in ["stop", "quitter", "annuler", "exit"]:
+            st.session_state.pt_state = "IDLE"
+            reply = "Session de portugais interrompue, sir. Je repasse en mode normal."
+        elif user_clean in ["mot suivant", "suivant", "next"]:
             available = [i for i in range(len(PORTUGUESE_VOCAB)) if i not in st.session_state.pt_used_indices]
             if not available or st.session_state.pt_done_count >= st.session_state.pt_limit:
                 st.session_state.pt_state = "COMPLETED"
@@ -388,11 +450,11 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                 st.session_state.pt_used_indices.append(idx)
                 st.session_state.pt_current_word = PORTUGUESE_VOCAB[idx][0]
                 st.session_state.pt_current_translation = PORTUGUESE_VOCAB[idx][1].lower()
-                reply = f"Nouveau mot en français : **{st.session_state.pt_current_word}**. Quelle est sa traduction ?"
+                reply = f"Nouveau mot à traduire en français : **{st.session_state.pt_current_word}**. Quelle est sa traduction ?"
         else:
             current_trans = st.session_state.pt_current_translation
             valid_options = [t.strip() for t in current_trans.split('/')]
-            is_correct = any(v in user_clean for v in valid_options)
+            is_correct = any(v == user_clean or v in user_clean.split() for v in valid_options)
             
             if is_correct:
                 st.session_state.pt_done_count += 1
@@ -401,93 +463,107 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                     save_portuguese_progress(st.session_state.pt_limit, st.session_state.pt_done_count, st.session_state.pt_used_indices, 1)
                     reply = "C'est exact ! Et voilà, tu as atteint la fin pour aujourd'hui. Boa, irmãozinho!"
                 else:
-                    import random
-                    available = [i for i in range(len(PORTUGUESE_VOCAB)) if i not in st.session_state.pt_used_indices]
-                    if available:
-                        idx = random.choice(available)
-                        st.session_state.pt_used_indices.append(idx)
-                        st.session_state.pt_current_word = PORTUGUESE_VOCAB[idx][0]
-                        st.session_state.pt_current_translation = PORTUGUESE_VOCAB[idx][1].lower()
-                        reply = f"✅ C'est juste ! Tape **mot suivant** pour continuer."
-                    else:
-                        st.session_state.pt_state = "COMPLETED"
-                        save_portuguese_progress(st.session_state.pt_limit, st.session_state.pt_done_count, st.session_state.pt_used_indices, 1)
-                        reply = "✅ C'est juste ! Il n'y a plus de mots disponibles. Boa, irmãozinho!"
+                    reply = "✅ C'est juste ! Tape **mot suivant** pour continuer."
             else:
-                reply = f"❌ Faux ! La traduction française de **{st.session_state.pt_current_word}** n'est pas correcte. Réessaie com le bon mot."
+                reply = f"❌ Faux ! La traduction française de **{st.session_state.pt_current_word}** n'est pas correcte. Réessaie (ou tape *stop* pour quitter)."
         handled_locally = True
 
-    # --- TRAITEMENT GÉNÉRAL VIA L'IA ---
+    # --- 2. TRAITEMENT GÉNÉRAL VIA L'IA (MULTI-TOURS BULLETPROOF) ---
     if handled_locally:
         with st.chat_message("assistant", avatar="🛡️"):
             st.markdown(reply)
         st.session_state.messages.append({"role": "assistant", "content": reply})
     else:
+        now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
         system_prompt = (
-            "Tu es A.D.A.M. (J.A.R.V.I.S style), assistant de Manu Paulo Cristo à Bruxelles. "
-            "Règles: 1. Utilise tes outils pour t'informer si besoin (read_memory, search_web, get_canvas_assignments, control_pc). "
-            "2. Ne charge pas d'informations au hasard. 3. Sois concis. 4. Enregistre les faits importants via save_memory."
+            f"Tu es A.D.A.M. (style J.A.R.V.I.S.), l'assistant personnel de Manu Paulo Cristo à Bruxelles (Étudiant EhB Campus Kaai). "
+            f"Date et heure : {now_str}. "
+            "Règles : "
+            "1. Si tu as besoin d'une info personnelle (adresse, routine, notes), appelle d'abord `read_memory`. "
+            "2. Enregistre tout nouveau fait important donné par l'utilisateur avec `save_memory`. "
+            "3. Pour ouvrir une application sur son PC, appelle `control_pc` avec le nom de l'exécutable Windows (ex: 'notepad', 'calc', 'chrome'). "
+            "4. Sois précis, analytique et concis."
         )
 
         formatted_messages = [{"role": "system", "content": system_prompt}]
         
-        recent_messages = st.session_state.messages[-6:]
-        for m in recent_messages:
-            if m["role"] in ["user", "assistant"]:
+        # Historique glissant limité aux 6 derniers échanges pour économiser les tokens
+        for m in st.session_state.messages[-6:]:
+            if m["role"] in ["user", "assistant"] and m.get("content"):
                 formatted_messages.append({"role": m["role"], "content": m["content"]})
 
         with st.chat_message("assistant", avatar="🛡️"):
             with st.spinner("Analyse tactique en cours..."):
+                reply = ""
                 try:
-                    response = client.chat.completions.create(
-                        model="openai/gpt-oss-120b",
-                        messages=formatted_messages,
-                        tools=TOOLS,
-                        tool_choice="auto"
-                    )
-                    msg = response.choices[0].message
-                    
-                    if hasattr(msg, "tool_calls") and msg.tool_calls:
-                        formatted_messages.append(msg)
-                        for tool_call in msg.tool_calls:
-                            try:
-                                args = json.loads(tool_call.function.arguments)
-                            except Exception:
-                                args = {}
-                                
-                            if tool_call.function.name == "read_memory":
-                                tool_output = read_memory()
-                            elif tool_call.function.name == "save_memory":
-                                tool_output = save_memory(args.get("key", "note"), args.get("value", ""))
-                            elif tool_call.function.name == "search_web":
-                                tool_output = search_web(args.get("query", user_input))
-                            elif tool_call.function.name == "get_canvas_assignments":
-                                tool_output = get_canvas_assignments()
-                            elif tool_call.function.name == "control_pc":
-                                tool_output = control_pc(args.get("app_name", ""))
-                            else:
-                                tool_output = "Action exécutée."
-                                
-                            formatted_messages.append({
-                                "role": "tool",
-                                "tool_call_id": tool_call.id,
-                                "content": str(tool_output)
-                            })
-                            
-                        # --- CORRECTION DE L'ERREUR 400 ---
-                        final_response = client.chat.completions.create(
-                            model="openai/gpt-oss-120b",
+                    # Boucle permettant jusqu'à 3 appels d'outils consécutifs (ex: read_memory -> search_web -> réponse)
+                    for step in range(3):
+                        response = client.chat.completions.create(
+                            model=MODEL_NAME,
                             messages=formatted_messages,
                             tools=TOOLS,
-                            tool_choice="none" # Empêche l'IA de relancer un outil en boucle
+                            tool_choice="auto",
+                            temperature=0.2
                         )
-                        reply = final_response.choices[0].message.content
-                    else:
-                        reply = msg.content if msg.content else "Opération terminée, sir."
-                        
-                    st.markdown(reply)
-                    st.session_state.messages.append({"role": "assistant", "content": reply})
+                        msg = response.choices[0].message
+
+                        if hasattr(msg, "tool_calls") and msg.tool_calls:
+                            # Conversion propre du message de l'assistant pour éviter les bugs de sérialisation
+                            assistant_msg = {
+                                "role": "assistant",
+                                "content": msg.content or "",
+                                "tool_calls": [
+                                    {
+                                        "id": tc.id,
+                                        "type": "function",
+                                        "function": {
+                                            "name": tc.function.name,
+                                            "arguments": tc.function.arguments
+                                        }
+                                    } for tc in msg.tool_calls
+                                ]
+                            }
+                            formatted_messages.append(assistant_msg)
+
+                            for tool_call in msg.tool_calls:
+                                tool_output = execute_tool_call(tool_call, fallback_query=user_input)
+                                formatted_messages.append({
+                                    "role": "tool",
+                                    "tool_call_id": tool_call.id,
+                                    "content": str(tool_output)
+                                })
+                        else:
+                            reply = msg.content or "Opération effectuée, sir."
+                            break
+
+                    # Si après 3 tours d'outils l'IA n'a toujours pas formulé de texte final, on force la conclusion sans outils
+                    if not reply:
+                        final_res = client.chat.completions.create(
+                            model=MODEL_NAME,
+                            messages=formatted_messages,
+                            temperature=0.2
+                        )
+                        reply = final_res.choices[0].message.content or "Opération terminée, sir."
+
                 except Exception as e:
-                    reply = f"Erreur de liaison neuronale : {e}"
-                    st.error(reply)
+                    # FILET DE SÉCURITÉ ULTIME : Si Groq renvoie une erreur 400 (tool_use_failed),
+                    # on récupère la mémoire en local et on force une réponse texte pure sans outils.
+                    try:
+                        mem_context = read_memory()
+                        fallback_messages = [
+                            {"role": "system", "content": f"{system_prompt}\nMémoire : {mem_context}"},
+                            {"role": "user", "content": user_input}
+                        ]
+                        fallback_res = client.chat.completions.create(
+                            model=MODEL_NAME,
+                            messages=fallback_messages,
+                            temperature=0.3
+                        )
+                        reply = fallback_res.choices[0].message.content
+                    except Exception as fatal_e:
+                        reply = f"Erreur de liaison neuronale : {fatal_e}"
+                        st.error(reply)
+
+                if reply:
+                    st.markdown(reply)
                     st.session_state.messages.append({"role": "assistant", "content": reply})
