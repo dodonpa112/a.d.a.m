@@ -181,6 +181,32 @@ def search_web(query: str) -> str:
     except Exception as e:
         return f"Erreur recherche web : {e}"
 
+def get_canvas_assignments() -> str:
+    """Récupère les devoirs et tâches à rendre sur Canvas."""
+    token = os.environ.get("CANVAS_API_TOKEN")
+    try:
+        if not token:
+            token = st.secrets.get("CANVAS_API_TOKEN", "")
+    except Exception:
+        pass
+        
+    base_url = os.environ.get("CANVAS_BASE_URL", "https://ehb.instructure.com")
+    
+    if not token:
+        return "Le token d'accès Canvas n'est pas configuré dans les secrets."
+        
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        response = requests.get(f"{base_url}/api/v1/users/self/upcoming_events", headers=headers, timeout=10)
+        if response.status_code == 200:
+            events = response.json()
+            event_list = [f"- {e.get('title')} (Date limite : {e.get('end_at')})" for e in events]
+            return "Voici vos prochaines échéances sur Canvas :\n" + "\n".join(event_list) if event_list else "Aucun devoir urgent trouvé sur Canvas."
+        else:
+            return f"Erreur lors de la récupération des devoirs Canvas (Code {response.status_code})."
+    except Exception as e:
+        return f"Erreur Canvas : {e}"
+
 TOOLS = [
     {
         "type": "function",
@@ -209,6 +235,14 @@ TOOLS = [
                 },
                 "required": ["query"]
             }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_canvas_assignments",
+            "description": "Récupère les devoirs, échéances et tâches à rendre sur la plateforme Canvas de l'EhB.",
+            "parameters": {"type": "object", "properties": {}}
         }
     }
 ]
@@ -343,7 +377,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
         handled_locally = True
 
     elif st.session_state.pt_state == "COMPLETED":
-        reply = "Tu đã déjà validé ta session de portugais du jour. Reviens demain après minuit pour de nouveaux mots, irmãozinho !"
+        reply = "Tu as déjà validé ta session de portugais du jour. Reviens demain après minuit pour de nouveaux mots, irmãozinho !"
         handled_locally = True
 
     # --- TRAITEMENT GÉNÉRAL VIA L'IA ---
@@ -355,10 +389,10 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
         memories = load_memories()
         system_prompt = (
             "Tu es A.D.A.M., un assistant personnel ultra-intelligent, analytique et de style J.A.R.V.I.S., basé à Bruxelles. "
-            "Tu assistes Manu Paulo Cristo dans ses études (EhB Campus Kaai), ses plannings, ses calculs de nutrition, "
+            "Tu assistes Manu Paulo Cristo dans ses études à l'EhB (Campus Kaai), ses plannings, ses notes Canvas, ses calculs de nutrition, "
             "ses prévisions météo détaillées et ses recherches d'itinéraires précis de transports en commun (STIB, bus, tram, train). "
             "Règles strictes : "
-            "1. Ne renvoie jamais l'utilisateur vers un site externe : utilise l'outil `search_web` pour trouver les horaires, trams, météo ou données en direct. "
+            "1. Ne renvoie jamais l'utilisateur vers un site externe : utilise l'outil `search_web` ou `get_canvas_assignments` pour trouver les informations en direct. "
             "2. Enregistre automatiquement toute information utile via `save_memory`."
         )
         if memories:
@@ -392,6 +426,8 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                                 tool_output = save_memory(args.get("key", "note"), args.get("value", ""))
                             elif tool_call.function.name == "search_web":
                                 tool_output = search_web(args.get("query", user_input))
+                            elif tool_call.function.name == "get_canvas_assignments":
+                                tool_output = get_canvas_assignments()
                             else:
                                 tool_output = "Action exécutée."
                                 
