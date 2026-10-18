@@ -220,44 +220,39 @@ def search_web(query: str) -> str:
         return f"Service web indisponible ({e})."
 
 def get_route(origin: str, destination: str) -> str:
-    """Calcule un itinéraire réel via l'API Google Maps Directions."""
+    """Calcule un itinéraire réel via la nouvelle Google Routes API."""
     api_key = get_secret("GOOGLE_MAPS_API_KEY")
     if not api_key:
         return "Erreur : La clé API Google Maps (GOOGLE_MAPS_API_KEY) n'est pas configurée dans les secrets Streamlit."
     
-    url = "https://maps.googleapis.com/maps/api/directions/json"
-    params = {
-        "origin": origin,
-        "destination": destination,
-        "mode": "transit",
-        "region": "be",
-        "language": "fr",
-        "key": api_key
+    url = "https://routes.googleapis.com/directions/v2:computeRoutes"
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": api_key,
+        "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,routes.legs.steps"
+    }
+    payload = {
+        "origin": {"address": origin},
+        "destination": {"address": destination},
+        "travelMode": "TRANSIT",
+        "languageCode": "fr"
     }
     
     try:
-        response = requests.get(url, params=params, timeout=8)
+        response = requests.post(url, json=payload, headers=headers, timeout=8)
         data = response.json()
         
-        if data.get("status") == "OK":
-            route = data["routes"][0]["legs"][0]
-            duration = route["duration"]["text"]
-            distance = route["distance"]["text"]
-            start_address = route["start_address"]
-            end_address = route["end_address"]
+        if "routes" in data and len(data["routes"]) > 0:
+            route = data["routes"][0]
+            duration_sec = int(route.get("duration", "0s").replace("s", ""))
+            duration_min = round(duration_sec / 60)
+            distance_m = route.get("distanceMeters", 0)
             
-            steps = []
-            for i, step in enumerate(route["steps"], 1):
-                instruction = step.get("html_instructions", "").replace("<b>", "").replace("</b>", "").replace('<div style="font-size:0.9em">', " (").replace("</div>", ")")
-                mode = step.get("travel_mode", "").lower()
-                steps.append(f"{i}. [{mode.upper()}] {instruction} ({step['distance']['text']}, {step['duration']['text']})")
-                
-            summary = f"**Itinéraire officiel de {start_address} vers {end_address}**\n"
-            summary += f"⏱️ Durée estimée : **{duration}** (Distance : {distance})\n\n"
-            summary += "Étapes détaillées :\n" + "\n".join(steps[:10])
+            summary = f"**Itinéraire officiel (Routes API) de {origin} vers {destination}**\n"
+            summary += f"⏱️ Durée estimée : environ **{duration_min} minutes** (Distance : {distance_m} m)\n"
             return summary
         else:
-            return f"Impossible de calculer l'itinéraire via l'API (Statut : {data.get('status')})."
+            return f"Impossible de calculer l'itinéraire via la Routes API. Réponse : {data}"
     except Exception as e:
         return f"Erreur de connexion au service cartographique : {e}"
 
