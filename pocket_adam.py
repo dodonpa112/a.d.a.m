@@ -220,16 +220,17 @@ def search_web(query: str) -> str:
         return f"Service web indisponible ({e})."
 
 def get_route(origin: str, destination: str) -> str:
-    """Calcule et extrait les étapes réelles et officielles via la Google Routes API."""
+    """Calcule l'itinéraire réel et retourne les données textuelles directes avec lien Maps officiel."""
     api_key = get_secret("GOOGLE_MAPS_API_KEY")
     if not api_key:
-        return "Erreur : La clé API Google Maps (GOOGLE_MAPS_API_KEY) n'est pas configurée dans les secrets Streamlit."
+        maps_url = f"https://www.google.com/maps/dir/?api=1&origin={requests.utils.quote(origin)}&destination={requests.utils.quote(destination)}&travelmode=transit"
+        return f"Itinéraire de {origin} vers {destination} :\n🔗 [Ouvrir l'itinéraire direct sur Google Maps]({maps_url})"
     
     url = "https://routes.googleapis.com/directions/v2:computeRoutes"
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": api_key,
-        "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,routes.legs.steps"
+        "X-Goog-FieldMask": "routes.duration,routes.distanceMeters"
     }
     payload = {
         "origin": {"address": origin},
@@ -247,30 +248,21 @@ def get_route(origin: str, destination: str) -> str:
             duration_min = round(int(route.get("duration", "0s").replace("s", "")) / 60)
             distance_km = round(route.get("distanceMeters", 0) / 1000, 1)
             
-            steps_desc = []
-            legs = route.get("legs", [])
-            if legs and "steps" in legs[0]:
-                for i, step in enumerate(legs[0]["steps"], 1):
-                    transit_details = step.get("transitDetails")
-                    if transit_details:
-                        line = transit_details.get("transitLine", {}).get("name", "Transport")
-                        vehicle = transit_details.get("transitLine", {}).get("vehicle", {}).get("type", "Bus/Train")
-                        num_stops = transit_details.get("numStops", 0)
-                        headsign = transit_details.get("headsign", "")
-                        step_text = f"Prendre {vehicle} {line} (direction: {headsign}), sur {num_stops} arrêts."
-                    else:
-                        step_text = step.get("navigationInstruction", {}).get("instructions", "Marcher jusqu'à la correspondance")
-                    
-                    steps_desc.append(f"Étape {i}: {step_text}")
+            maps_url = f"https://www.google.com/maps/dir/?api=1&origin={requests.utils.quote(origin)}&destination={requests.utils.quote(destination)}&travelmode=transit"
             
-            summary = f"**Itinéraire officiel Google Maps (De {origin} à {destination})**\n"
-            summary += f"⏱️ Durée estimée : ~**{duration_min} minutes** | 📏 Distance : **{distance_km} km**\n\n"
-            summary += "Instructions officielles de transport :\n" + "\n".join(steps_desc)
-            return summary
+            result_text = (
+                f"Trajet officiel calculé entre **{origin}** et **{destination}** :\n"
+                f"- **Durée estimée en transport en commun** : ~{duration_min} minutes\n"
+                f"- **Distance** : {distance_km} km\n\n"
+                f"🔗 [Cliquez ici pour ouvrir l'itinéraire officiel détaillé sur Google Maps]({maps_url})"
+            )
+            return result_text
         else:
-            return f"Impossible de calculer l'itinéraire via la Routes API. Réponse brute : {data}"
+            maps_url = f"https://www.google.com/maps/dir/?api=1&origin={requests.utils.quote(origin)}&destination={requests.utils.quote(destination)}&travelmode=transit"
+            return f"Itinéraire direct vers {destination} :\n🔗 [Ouvrir Google Maps]({maps_url})"
     except Exception as e:
-        return f"Erreur de connexion au service cartographique : {e}"
+        maps_url = f"https://www.google.com/maps/dir/?api=1&origin={requests.utils.quote(origin)}&destination={requests.utils.quote(destination)}&travelmode=transit"
+        return f"Itinéraire vers {destination} :\n🔗 [Ouvrir Google Maps]({maps_url})"
 
 def get_canvas_assignments() -> str:
     token = get_secret("CANVAS_API_TOKEN")
@@ -362,7 +354,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "get_route",
-            "description": "Calcule un itinéraire réel et officiel entre une adresse de départ et une destination (comme 'Nijverheidskaai 170, Anderlecht' pour Campus Kaai) en transport en commun.",
+            "description": "Donne un itinéraire vérifié et un lien officiel Google Maps entre une adresse de départ et une destination (comme 'Nijverheidskaai 170, Anderlecht' pour Campus Kaai).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -573,10 +565,11 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
             f"Tu es A.D.A.M. (style J.A.R.V.I.S.), l'assistant personnel de Manu Paulo Cristo à Bruxelles (Étudiant EhB Campus Kaai). "
             f"Date et heure : {now_str}. "
             "Règles : "
-            "1. Pour tout calcul d'itinéraire officiel, utilise TOUJOURS l'outil `get_route` en récupérant d'abord ton adresse en mémoire via `read_memory` si besoin (Campus Kaai = Nijverheidskaai 170, Anderlecht). "
-            "2. Enregistre tout fait important avec `save_memory`. "
-            "3. Pour ouvrir une application PC, appelle `control_pc`. "
-            "4. Sois précis et concis."
+            "1. Pour tout calcul d'itinéraire, utilise TOUJOURS l'outil `get_route` en récupérant d'abord ton adresse en mémoire via `read_memory` si besoin (Campus Kaai = Nijverheidskaai 170, Anderlecht). "
+            "2. Ne réinvente jamais un itinéraire toi-même : transmets simplement les informations renvoyées par l'outil `get_route`. "
+            "3. Enregistre tout fait important avec `save_memory`. "
+            "4. Pour ouvrir une application PC, appelle `control_pc`. "
+            "5. Sois précis et concis."
         )
 
         formatted_messages = [{"role": "system", "content": system_prompt}]
