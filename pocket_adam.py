@@ -176,7 +176,7 @@ def search_web(query: str) -> str:
         if response.status_code != 200:
             return "Erreur de connexion au service de recherche."
         soup = BeautifulSoup(response.text, 'html.parser')
-        # Optimisation : On limite à 2 snippets pour économiser les tokens
+        # Limité à 2 snippets pour économiser les tokens
         results = [s.get_text(strip=True) for s in soup.find_all('a', class_='result__snippet', limit=2) if s.get_text(strip=True)]
         return "\n\n".join(results) if results else "Aucun résultat pertinent trouvé."
     except Exception as e:
@@ -205,6 +205,27 @@ def get_canvas_assignments() -> str:
             return f"Erreur lors de la récupération des devoirs Canvas (Code {response.status_code})."
     except Exception as e:
         return f"Erreur Canvas : {e}"
+
+def control_pc(action: str, target: str) -> str:
+    """Envoie une commande au PC local de l'utilisateur via le tunnel Ngrok configuré."""
+    bridge_url = os.environ.get("PC_BRIDGE_URL")
+    try:
+        if not bridge_url:
+            bridge_url = st.secrets.get("PC_BRIDGE_URL", "")
+    except Exception:
+        pass
+        
+    if not bridge_url:
+        return "Le pont de connexion vers le PC (PC_BRIDGE_URL) n'est pas configuré dans les secrets."
+        
+    try:
+        response = requests.post(f"{bridge_url}/execute", json={"action": action, "target": target}, timeout=5)
+        if response.status_code == 200:
+            return "Ordre exécuté avec succès sur votre PC, sir."
+        else:
+            return "Impossible de joindre le PC (vérifiez si le script local et Ngrok sont actifs)."
+    except Exception as e:
+        return f"Erreur de communication avec le PC : {e}"
 
 TOOLS = [
     {
@@ -242,6 +263,21 @@ TOOLS = [
             "name": "get_canvas_assignments",
             "description": "Récupère les devoirs, échéances et tâches à rendre sur la plateforme Canvas de l'EhB.",
             "parameters": {"type": "object", "properties": {}}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "control_pc",
+            "description": "Exécute une action physique ou ouvre une application/site web sur le PC de l'utilisateur.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "description": "Type d'action, ex: 'open_browser'"},
+                    "target": {"type": "string", "description": "La cible, ex: 'youtube' ou 'canvas'"}
+                },
+                "required": ["action", "target"]
+            }
         }
     }
 ]
@@ -375,7 +411,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                 reply = f"❌ Faux ! La traduction française de **{st.session_state.pt_current_word}** n'est pas correcte. Réessaie avec le bon mot."
         handled_locally = True
 
-    # --- TRAITEMENT GÉNÉRAL VIA L'IA (Avec optimisation d'historique glissant pour économiser les tokens) ---
+    # --- TRAITEMENT GÉNÉRAL VIA L'IA (Avec historique glissant de 6 messages) ---
     if handled_locally:
         with st.chat_message("assistant", avatar="🛡️"):
             st.markdown(reply)
@@ -385,9 +421,10 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
         system_prompt = (
             "Tu es A.D.A.M., un assistant personnel ultra-intelligent, analytique et de style J.A.R.V.I.S., basé à Bruxelles. "
             "Tu assistes Manu Paulo Cristo dans ses études à l'EhB (Campus Kaai), ses plannings, ses notes Canvas, ses calculs de nutrition, "
-            "ses prévisions météo détaillées et ses recherches d'itinéraires précis de transports en commun (STIB, bus, tram, train). "
+            "ses prévisions météo détaillées, ses recherches d'itinéraires précis de transports en commun (STIB, bus, tram, train) "
+            "et le pilotage à distance de son PC. "
             "Règles strictes : "
-            "1. Ne renvoie jamais l'utilisateur vers un site externe : utilise l'outil `search_web` ou `get_canvas_assignments` pour trouver les informations en direct. "
+            "1. Ne renvoie jamais l'utilisateur vers un site externe : utilise `search_web`, `get_canvas_assignments` ou `control_pc` pour trouver ou exécuter les informations en direct. "
             "2. Enregistre automatiquement toute information utile via `save_memory`."
         )
         if memories:
@@ -395,7 +432,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
 
         formatted_messages = [{"role": "system", "content": system_prompt}]
         
-        # Optimisation : On ne garde que les 6 derniers messages de l'historique pour économiser les tokens
+        # Historique glissant limité aux 6 derniers messages pour économiser les tokens
         recent_messages = st.session_state.messages[-6:]
         for m in recent_messages:
             if m["role"] in ["user", "assistant"]:
@@ -426,6 +463,8 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                                 tool_output = search_web(args.get("query", user_input))
                             elif tool_call.function.name == "get_canvas_assignments":
                                 tool_output = get_canvas_assignments()
+                            elif tool_call.function.name == "control_pc":
+                                tool_output = control_pc(args.get("action", ""), args.get("target", ""))
                             else:
                                 tool_output = "Action exécutée."
                                 
