@@ -32,7 +32,7 @@ client = OpenAI(
 DB_FILE = "adam_system.db"
 MEMORY_FILE = "memory.json"
 
-# --- LISTE OFFICIELLE DE VOCABULAIRE PORTUGAIS (TRADUCTIONS 100% FRANÇAIS) ---
+# --- LISTE OFFICIELLE DE VOCABULAIRE PORTUGAIS ---
 PORTUGUESE_VOCAB = [
     ("Eu", "Je"), ("Você", "Vous"), ("Tu", "Tu"), ("Ele", "Il"),
     ("Ela", "Elle"), ("Nós", "Nous"), ("Eles", "Eux / Ils"), ("Elas", "Elles"),
@@ -62,7 +62,7 @@ PORTUGUESE_VOCAB = [
     ("Ali / Lá", "Là-bas / Là"), ("Bem", "Bien"), ("Mal", "Mal"), ("Talvez", "Peut-être")
 ]
 
-# --- OPTIMISATION 1 : MISE EN CACHE DE LA BDD ---
+# --- MISE EN CACHE DE LA BDD ---
 @st.cache_resource
 def init_db():
     try:
@@ -150,9 +150,7 @@ def load_memories():
         pass
     return memories
 
-# --- OPTIMISATION 2 : L'OUTIL DE LECTURE DE MÉMOIRE ---
 def read_memory(topic: str = "all") -> str:
-    """Outil pour que l'IA consulte la base de données uniquement quand elle en a besoin."""
     memories = load_memories()
     if not memories:
         return "Aucune mémoire enregistrée."
@@ -169,7 +167,6 @@ def save_memory(key: str, value: str) -> str:
     except Exception as e:
         return f"Erreur : {e}"
 
-# --- OPTIMISATION 3 : RECHERCHE WEB BULLETPROOF ET LÉGÈRE ---
 def search_web(query: str) -> str:
     try:
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
@@ -222,7 +219,7 @@ def control_pc(app_name: str) -> str:
     try:
         response = requests.post(f"{bridge_url}/execute", json={"app_name": app_name}, timeout=5)
         if response.status_code == 200:
-            return f"Ordre de lancement pour '{app_name}' exécuté avec succès sur votre PC, sir."
+            return f"Ordre de lancement pour '{app_name}' exécuté avec succès sur votre PC."
         else:
             return "Impossible de joindre le PC (vérifiez si le script local et Ngrok sont actifs)."
     except Exception as e:
@@ -284,7 +281,7 @@ TOOLS = [
                 "properties": {
                     "app_name": {
                         "type": "string",
-                        "description": "Le nom exact de l'exécutable Windows de l'application à lancer (ex: 'notepad' pour le bloc-notes, 'chrome', 'calc', 'spotify', 'winword'). Ne mettez jamais l'extension .exe."
+                        "description": "Le nom exact de l'exécutable Windows (ex: 'notepad' pour le bloc-notes, 'chrome', 'calc', 'spotify', 'winword'). Ne mettez jamais l'extension .exe."
                     }
                 },
                 "required": ["app_name"]
@@ -342,7 +339,6 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
 
     user_clean = user_input.strip().lower()
     
-    # --- LOGIQUE PORTUGAISE ---
     db_prog = check_daily_portuguese_status()
     is_completed_today = (db_prog and db_prog[3] == 1)
     
@@ -418,7 +414,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                         save_portuguese_progress(st.session_state.pt_limit, st.session_state.pt_done_count, st.session_state.pt_used_indices, 1)
                         reply = "✅ C'est juste ! Il n'y a plus de mots disponibles. Boa, irmãozinho!"
             else:
-                reply = f"❌ Faux ! La traduction française de **{st.session_state.pt_current_word}** n'est pas correcte. Réessaie avec le bon mot."
+                reply = f"❌ Faux ! La traduction française de **{st.session_state.pt_current_word}** n'est pas correcte. Réessaie com le bon mot."
         handled_locally = True
 
     # --- TRAITEMENT GÉNÉRAL VIA L'IA ---
@@ -427,7 +423,6 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
             st.markdown(reply)
         st.session_state.messages.append({"role": "assistant", "content": reply})
     else:
-        # --- OPTIMISATION 4 : PROMPT SYSTEME LÉGER ---
         system_prompt = (
             "Tu es A.D.A.M. (J.A.R.V.I.S style), assistant de Manu Paulo Cristo à Bruxelles. "
             "Règles: 1. Utilise tes outils pour t'informer si besoin (read_memory, search_web, get_canvas_assignments, control_pc). "
@@ -479,9 +474,12 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                                 "content": str(tool_output)
                             })
                             
+                        # --- CORRECTION DE L'ERREUR 400 ---
                         final_response = client.chat.completions.create(
                             model="openai/gpt-oss-120b",
-                            messages=formatted_messages
+                            messages=formatted_messages,
+                            tools=TOOLS,
+                            tool_choice="none" # Empêche l'IA de relancer un outil en boucle
                         )
                         reply = final_response.choices[0].message.content
                     else:
