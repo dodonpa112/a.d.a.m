@@ -16,6 +16,7 @@ st.set_page_config(
     layout="centered"
 )
 
+# Récupération sécurisée de la clé API Groq
 api_key = os.environ.get("GROQ_API_KEY")
 if not api_key:
     try:
@@ -31,37 +32,46 @@ client = OpenAI(
 DB_FILE = "adam_system.db"
 MEMORY_FILE = "memory.json"
 
-# --- LISTE OFFICIELLE DE VOCABULAIRE PORTUGAIS ---
+# --- LISTE OFFICIELLE DE VOCABULAIRE PORTUGAIS (TRADUCTIONS 100% FRANÇAIS) ---
 PORTUGUESE_VOCAB = [
-    ("Eu", "I"), ("Você", "You"), ("Tu", "You"), ("Ele", "He / It"),
-    ("Ela", "She / It"), ("Nós", "We"), ("Eles", "They"), ("Elas", "They"),
-    ("Me / Mim", "Me"), ("Se", "Oneself"), ("Meu / Minha", "My / Mine"), ("Seu / Sua", "Your / His / Her"),
-    ("Ser", "To be"), ("Estar", "To be"), ("Ter", "To have"), ("Fazer", "To do / To make"),
-    ("Ir", "To go"), ("Poder", "Can / To be able to"), ("Querer", "To want"), ("Saber", "To know"),
-    ("Ver", "To see"), ("Dizer", "To say / To tell"), ("Dar", "To give"), ("Falar", "To speak / To talk"),
-    ("Vir", "To come"), ("Ter de / Ter que", "To have to"),
-    ("O", "The"), ("A", "The"), ("Os", "The"), ("As", "The"),
-    ("Um", "A / An / One"), ("Uma", "A / An / One"), ("Este / Esta", "This"), ("Esse / Essa", "That"),
-    ("E", "And"), ("Mas", "But"), ("Ou", "Or"), ("Porque", "Because"),
-    ("Se", "If"), ("Como", "As / Like / How"), ("Que", "That / Which / Who"), ("Então", "Then / So"),
-    ("Também", "Also / Too"), ("Portanto", "Therefore / So"),
-    ("De", "Of / From"), ("Em", "In / On / At"), ("Para", "To / For"), ("Por", "By / Through / For"),
-    ("Com", "With"), ("Sem", "Without"), ("Pelo / Pela", "By the / Through the"), ("Sobre", "On / About / Over"), ("Até", "Until / Up to"),
-    ("O quê?", "What?"), ("Quem?", "Who?"), ("Onde?", "Where?"), ("Quando?", "When?"),
-    ("Por que?", "Why?"), ("Como?", "How?"), ("Quanto?", "How much? / How many?"),
-    ("Coisa", "Thing"), ("Tempo", "Time / Weather"), ("Ano", "Year"), ("Dia", "Day"),
-    ("Homem", "Man"), ("Mulher", "Woman"), ("Pessoa", "Person"), ("Vida", "Life"),
-    ("Mundo", "World"), ("Casa", "House / Home"), ("Trabalho", "Work / Job"), ("Lugar", "Place"),
-    ("Bom / Boa", "Good"), ("Mau / Má ou Ruim", "Bad"), ("Grande", "Big / Great"), ("Pequeno / Pequena", "Small"),
-    ("Novo / Nova", "New / Young"), ("Velho / Velha", "Old"), ("Outro / Outra", "Other / Another"), ("Mesmo / Mesma", "Same"),
-    ("Primeiro / Primeira", "First"), ("Último / Última", "Last"), ("Fácil", "Easy"), ("Difícil", "Difficult"),
-    ("Não", "No / Not"), ("Sim", "Yes"), ("Muito", "Very / Much"), ("Pouco", "Little / Few"),
-    ("Mais", "More"), ("Menos", "Less"), ("Agora", "Now"), ("Hoje", "Today"),
-    ("Já", "Already / Now"), ("Sempre", "Always"), ("Nunca", "Never"), ("Aqui", "Here"),
-    ("Ali / Lá", "There"), ("Bem", "Well"), ("Mal", "Badly"), ("Talvez", "Maybe")
+    # Pronoms
+    ("Eu", "Je"), ("Você", "Vous"), ("Tu", "Tu"), ("Ele", "Il"),
+    ("Ela", "Elle"), ("Nós", "Nous"), ("Eles", "Eux / Ils"), ("Elas", "Elles"),
+    ("Me / Mim", "Moi"), ("Se", "Se / Soi"), ("Meu / Minha", "Mon / Ma / Miens"), ("Seu / Sua", "Ton / Sa / Son"),
+    # Verbes Essentiels
+    ("Ser", "Être"), ("Estar", "Être"), ("Ter", "Avoir"), ("Fazer", "Faire"),
+    ("Ir", "Aller"), ("Poder", "Pouvoir"), ("Querer", "Vouloir"), ("Saber", "Savoir"),
+    ("Ver", "Voir"), ("Dizer", "Dire"), ("Dar", "Donner"), ("Falar", "Parler"),
+    ("Vir", "Venir"), ("Ter de / Ter que", "Devoir"),
+    # Articles
+    ("O", "Le"), ("A", "La"), ("Os", "Les"), ("As", "Les"),
+    ("Um", "Un"), ("Uma", "Une"), ("Este / Esta", "Ce / Cette"), ("Esse / Essa", "Ce / Cette"),
+    # Conjonctions
+    ("E", "Et"), ("Mas", "Mais"), ("Ou", "Ou"), ("Porque", "Parce que"),
+    ("Se", "Si"), ("Como", "Comme"), ("Que", "Que"), ("Então", "Alors / Donc"),
+    ("Também", "Aussi"), ("Portanto", "Par conséquent / Donc"),
+    # Prépositions
+    ("De", "De"), ("Em", "Dans / En / Sur"), ("Para", "Pour / Vers"), ("Por", "Par"),
+    ("Com", "Avec"), ("Sem", "Sans"), ("Pelo / Pela", "Par le / Par la"), ("Sobre", "Sur / À propos de"), ("Até", "Jusqu'à"),
+    # Mots interrogatifs
+    ("O quê?", "Quoi ?"), ("Quem?", "Qui ?"), ("Onde?", "Où ?"), ("Quando?", "Quand ?"),
+    ("Por que?", "Pourquoi ?"), ("Como?", "Comment ?"), ("Quanto?", "Combien ?"),
+    # Noms communs
+    ("Coisa", "Chose"), ("Tempo", "Temps"), ("Ano", "Année"), ("Dia", "Jour"),
+    ("Homem", "Homme"), ("Mulher", "Femme"), ("Pessoa", "Personne"), ("Vida", "Vie"),
+    ("Mundo", "Monde"), ("Casa", "Maison"), ("Trabalho", "Travail"), ("Lugar", "Lieu / Endroit"),
+    # Adjectifs
+    ("Bom / Boa", "Bon / Bonne"), ("Mau / Má ou Ruim", "Mauvais / Mauvaise"), ("Grande", "Grand / Grande"), ("Pequeno / Pequena", "Petit / Petite"),
+    ("Novo / Nova", "Nouveau / Neuf / Jeune"), ("Velho / Velha", "Vieux / Vieille"), ("Outro / Outra", "Autre"), ("Mesmo / Mesma", "Même"),
+    ("Primeiro / Primeira", "Premier / Première"), ("Último / Última", "Dernier / Dernière"), ("Fácil", "Facile"), ("Difícil", "Difficile"),
+    # Adverbes
+    ("Não", "Non"), ("Sim", "Oui"), ("Muito", "Très / Beaucoup"), ("Pouco", "Peu"),
+    ("Mais", "Plus"), ("Menos", "Moins"), ("Agora", "Maintenant"), ("Hoje", "Aujourd'hui"),
+    ("Já", "Déjà"), ("Sempre", "Toujours"), ("Nunca", "Jamais"), ("Aqui", "Ici"),
+    ("Ali / Lá", "Là-bas / Là"), ("Bem", "Bien"), ("Mal", "Mal"), ("Talvez", "Peut-être")
 ]
 
-# --- INITIALISATION DE LA BASE DE DONNÉES ---
+# --- INITIALISATION DE LA BASE DE DONNÉES SQLite ---
 def init_db():
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -229,7 +239,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# En-tête personnalisé
+# En-tête de l'application
 st.title("A.D.A.M.")
 st.markdown("à votre service")
 st.markdown("---")
@@ -239,7 +249,6 @@ if "messages" not in st.session_state:
         {"role": "assistant", "content": "Salutations Mr. Paulo Cristo"}
     ]
 
-# Affichage sécurisé de l'historique sans provoquer d'erreur d'avatar fichier
 for msg in st.session_state.messages:
     if msg["role"] == "user":
         with st.chat_message("user", avatar="👤"):
@@ -255,7 +264,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
 
     user_clean = user_input.strip().lower()
     
-    # --- LOGIQUE PORTUGAISE ---
+    # --- LOGIQUE PORTUGAISE BLINDÉE (TRADUCTION FRANÇAISE) ---
     db_prog = check_daily_portuguese_status()
     if db_prog and db_prog[3] == 1 and st.session_state.pt_state == "IDLE":
         st.session_state.pt_state = "COMPLETED"
@@ -288,7 +297,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
             st.session_state.pt_state = "LEARNING"
             save_portuguese_progress(limit_val, 0, st.session_state.pt_used_indices, 0)
             
-            reply = f"Parfait ! C'est parti pour {limit_val} mots. Traduis ce mot en français : **{st.session_state.pt_current_word}**"
+            reply = f"Parfait ! C'est parti pour {limit_val} mots. Traduis ce mot en **français** : **{st.session_state.pt_current_word}**"
         else:
             reply = "Veuillez entrer un chiffre valide pour définir la limite (ex: 5)."
         handled_locally = True
@@ -306,7 +315,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                 st.session_state.pt_used_indices.append(idx)
                 st.session_state.pt_current_word = PORTUGUESE_VOCAB[idx][0]
                 st.session_state.pt_current_translation = PORTUGUESE_VOCAB[idx][1].lower()
-                reply = f"Nouveau mot : **{st.session_state.pt_current_word}**. Quelle est sa traduction ?"
+                reply = f"Nouveau mot en français : **{st.session_state.pt_current_word}**. Quelle est sa traduction ?"
         else:
             current_trans = st.session_state.pt_current_translation
             valid_options = [t.strip() for t in current_trans.split('/')]
@@ -330,11 +339,11 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                     else:
                         reply = "✅ C'est juste, et il n'y a plus de mots disponibles !"
             else:
-                reply = f"❌ Faux ! La traduction de **{st.session_state.pt_current_word}** n'est pas correcte ou comporte une faute. Réessaie avec le bon mot et la bonne orthographe."
+                reply = f"❌ Faux ! La traduction française de **{st.session_state.pt_current_word}** n'est pas correcte ou comporte une faute. Réessaie avec le bon mot."
         handled_locally = True
 
     elif st.session_state.pt_state == "COMPLETED":
-        reply = "Tu as déjà validé ta session de portugais du jour. Reviens demain après minuit pour de nouveaux mots, irmãozinho !"
+        reply = "Tu đã déjà validé ta session de portugais du jour. Reviens demain après minuit pour de nouveaux mots, irmãozinho !"
         handled_locally = True
 
     # --- TRAITEMENT GÉNÉRAL VIA L'IA ---
