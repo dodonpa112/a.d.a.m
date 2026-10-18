@@ -203,7 +203,7 @@ TOOLS = [
     }
 ]
 
-# --- DESIGN CSS PERSONNALISÉ (Fond noir pur, Avatars M & A, Titre épuré) ---
+# --- DESIGN CSS PERSONNALISÉ ---
 st.markdown("""
     <style>
     .stApp {
@@ -229,7 +229,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# En-tête personnalisé sans le bouclier
+# En-tête personnalisé
 st.title("A.D.A.M.")
 st.markdown("à votre service")
 st.markdown("---")
@@ -239,18 +239,18 @@ if "messages" not in st.session_state:
         {"role": "assistant", "content": "Salutations Mr. Paulo Cristo"}
     ]
 
-# Affichage de l'historique avec les avatars personnalisés ("M" pour Manu, "A" pour l'assistant)
+# Affichage sécurisé de l'historique sans provoquer d'erreur d'avatar fichier
 for msg in st.session_state.messages:
     if msg["role"] == "user":
-        with st.chat_message("user", avatar="M"):
+        with st.chat_message("user", avatar="👤"):
             st.markdown(msg["content"])
     elif msg["role"] == "assistant":
-        with st.chat_message("assistant", avatar="A"):
+        with st.chat_message("assistant", avatar="🛡️"):
             st.markdown(msg["content"])
 
 if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
     st.session_state.messages.append({"role": "user", "content": user_input})
-    with st.chat_message("user", avatar="M"):
+    with st.chat_message("user", avatar="👤"):
         st.markdown(user_input)
 
     user_clean = user_input.strip().lower()
@@ -339,7 +339,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
 
     # --- TRAITEMENT GÉNÉRAL VIA L'IA ---
     if handled_locally:
-        with st.chat_message("assistant", avatar="A"):
+        with st.chat_message("assistant", avatar="🛡️"):
             st.markdown(reply)
         st.session_state.messages.append({"role": "assistant", "content": reply})
     else:
@@ -360,7 +360,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
             if m["role"] in ["user", "assistant"]:
                 formatted_messages.append({"role": m["role"], "content": m["content"]})
 
-        with st.chat_message("assistant", avatar="A"):
+        with st.chat_message("assistant", avatar="🛡️"):
             with st.spinner("Analyse tactique en cours..."):
                 try:
                     response = client.chat.completions.create(
