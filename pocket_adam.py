@@ -182,7 +182,6 @@ def search_web(query: str) -> str:
         return f"Erreur recherche web : {e}"
 
 def get_canvas_assignments() -> str:
-    """Récupère les devoirs et tâches à rendre sur Canvas."""
     token = os.environ.get("CANVAS_API_TOKEN")
     try:
         if not token:
@@ -191,7 +190,6 @@ def get_canvas_assignments() -> str:
         pass
         
     base_url = os.environ.get("CANVAS_BASE_URL", "https://ehb.instructure.com")
-    
     if not token:
         return "Le token d'accès Canvas n'est pas configuré dans les secrets."
         
@@ -273,7 +271,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# En-tête de l'application
 st.title("A.D.A.M.")
 st.markdown("à votre service")
 st.markdown("---")
@@ -298,23 +295,24 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
 
     user_clean = user_input.strip().lower()
     
-    # --- LOGIQUE PORTUGAISE BLINDÉE (TRADUCTION FRANÇAISE) ---
+    # --- LOGIQUE PORTUGAISE SÉCURISÉE ---
     db_prog = check_daily_portuguese_status()
-    if db_prog and db_prog[3] == 1 and st.session_state.pt_state == "IDLE":
-        st.session_state.pt_state = "COMPLETED"
+    is_completed_today = (db_prog and db_prog[3] == 1)
     
     handled_locally = False
     reply = ""
 
+    # 1. Si l'utilisateur tape "estou pronto"
     if user_clean == "estou pronto":
-        if db_prog and db_prog[3] == 1:
-            reply = "Tu as déjà terminé ta session de portugais pour aujourd'hui. Reviens demain après minuit !"
+        if is_completed_today:
+            reply = "Tu as déjà validé ta session de portugais du jour. Reviens demain après minuit pour de nouveaux mots, irmãozinho !"
             st.session_state.pt_state = "COMPLETED"
         else:
             reply = "Quantas palavras hoje?"
             st.session_state.pt_state = "WAITING_LIMIT"
         handled_locally = True
 
+    # 2. Si l'on attend le choix de la limite
     elif st.session_state.pt_state == "WAITING_LIMIT":
         if user_clean.isdigit():
             limit_val = int(user_clean)
@@ -336,6 +334,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
             reply = "Veuillez entrer un chiffre valide pour définir la limite (ex: 5)."
         handled_locally = True
 
+    # 3. Si l'on est en train d'apprendre
     elif st.session_state.pt_state == "LEARNING":
         if user_clean in ["mot suivant", "suivant", "next"]:
             import random
@@ -360,7 +359,7 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                 if st.session_state.pt_done_count >= st.session_state.pt_limit:
                     st.session_state.pt_state = "COMPLETED"
                     save_portuguese_progress(st.session_state.pt_limit, st.session_state.pt_done_count, st.session_state.pt_used_indices, 1)
-                    reply = "C'est exact ! Et voilà, tu as terminé pour aujourd'hui. Boa, irmãozinho!"
+                    reply = "C'est exact ! Et voilà, tu as atteint la fin pour aujourd'hui. Boa, irmãozinho!"
                 else:
                     import random
                     available = [i for i in range(len(PORTUGUESE_VOCAB)) if i not in st.session_state.pt_used_indices]
@@ -371,16 +370,14 @@ if user_input := st.chat_input("Envoyez un message à A.D.A.M..."):
                         st.session_state.pt_current_translation = PORTUGUESE_VOCAB[idx][1].lower()
                         reply = f"✅ C'est juste ! Tape **mot suivant** pour continuer."
                     else:
-                        reply = "✅ C'est juste, et il n'y a plus de mots disponibles !"
+                        st.session_state.pt_state = "COMPLETED"
+                        save_portuguese_progress(st.session_state.pt_limit, st.session_state.pt_done_count, st.session_state.pt_used_indices, 1)
+                        reply = "✅ C'est juste ! Il n'y a plus de mots disponibles. Boa, irmãozinho!"
             else:
-                reply = f"❌ Faux ! La traduction française de **{st.session_state.pt_current_word}** n'est pas correcte ou comporte une faute. Réessaie avec le bon mot."
+                reply = f"❌ Faux ! La traduction française de **{st.session_state.pt_current_word}** n'est pas correcte. Réessaie avec le bon mot."
         handled_locally = True
 
-    elif st.session_state.pt_state == "COMPLETED":
-        reply = "Tu as déjà validé ta session de portugais du jour. Reviens demain après minuit pour de nouveaux mots, irmãozinho !"
-        handled_locally = True
-
-    # --- TRAITEMENT GÉNÉRAL VIA L'IA ---
+    # --- TRAITEMENT GÉNÉRAL VIA L'IA (Si ce n'est pas une commande du module de portugais) ---
     if handled_locally:
         with st.chat_message("assistant", avatar="🛡️"):
             st.markdown(reply)
